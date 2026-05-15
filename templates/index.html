@@ -1,91 +1,381 @@
-
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
+
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
     <title>Control de Gastos</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+
 </head>
+
 <body>
 
 <div class="container">
 
+    <!-- ========================= -->
+    <!-- TOPBAR -->
+    <!-- ========================= -->
+
+    <div class="topbar">
+
+        <a href="/">
+            Dashboard
+        </a>
+
+        <a href="/maestras">
+            Configuración
+        </a>
+
+    </div>
+
+
+    <!-- ========================= -->
+    <!-- HEADER -->
+    <!-- ========================= -->
+
     <h1>CONTROL DE GASTOS</h1>
+
     <h2>{{ mes_actual }}</h2>
 
+
+    <!-- ========================= -->
+    <!-- CARDS -->
+    <!-- ========================= -->
+
     <div class="cards">
+
         <div class="card">
+
             <h3>INGRESOS</h3>
-            <p>${{ "{:,.0f}".format(total_salarios) }}</p>
+
+            <p>
+                ${{ "{:,.0f}".format(total_ingresos) }}
+            </p>
+
         </div>
 
         <div class="card">
+
             <h3>GASTOS</h3>
-            <p>${{ "{:,.0f}".format(total_gastos) }}</p>
+
+            <p>
+                ${{ "{:,.0f}".format(total_gastos) }}
+            </p>
+
         </div>
 
         <div class="card">
+
             <h3>BALANCE</h3>
-            <p>${{ "{:,.0f}".format(balance) }}</p>
+
+            <p>
+                ${{ "{:,.0f}".format(balance) }}
+            </p>
+
         </div>
+
     </div>
+
+
+    <!-- ========================= -->
+    <!-- FORMULARIOS -->
+    <!-- ========================= -->
 
     <div class="grid">
 
+        <!-- ========================= -->
+        <!-- FORM GASTOS -->
+        <!-- ========================= -->
+
         <div class="box">
+
             <h3>AGREGAR GASTO</h3>
 
-            <form method="POST" action="/guardar_gasto">
-                <input type="text" name="concepto" placeholder="Concepto del gasto" required>
+            <form method="POST"
+                  action="/guardar_gasto">
 
-                <input type="number" step="0.01" name="valor" placeholder="Valor del gasto" required>
+                <input type="text"
+                       name="concepto"
+                       placeholder="Concepto del gasto"
+                       required>
 
-                <input type="date" name="fecha" required>
+                <input type="number"
+                       step="0.01"
+                       name="valor"
+                       placeholder="Valor del gasto"
+                       required>
 
-                <button type="submit">Guardar Gasto</button>
+                <input type="date"
+                       name="fecha"
+                       required>
+
+                <button type="submit">
+                    Guardar Gasto
+                </button>
+
             </form>
+
         </div>
 
+
+        <!-- ========================= -->
+        <!-- FORM INGRESOS -->
+        <!-- ========================= -->
+
         <div class="box">
-            <h3>AGREGAR SALARIO</h3>
 
-            <form method="POST" action="/guardar_salario">
-                <input type="text" name="concepto" placeholder="Concepto del salario" required>
+            <h3>AGREGAR INGRESO</h3>
 
-                <input type="number" step="0.01" name="valor" placeholder="Valor del salario" required>
+            <form method="POST"
+                  action="/guardar_ingreso">
 
-                <button type="submit">Guardar Salario</button>
+                <!-- SELECT TIPO -->
+
+                <select
+                    name="tipo_ingreso"
+                    id="tipo_ingreso"
+                    required>
+
+                    <option value="">
+                        Selecciona ingreso
+                    </option>
+
+                    {% for tipo in tipos_ingreso %}
+
+                    <option
+                        value="{{ tipo.id }}"
+                        data-tipo="{{ tipo.tipo_calculo }}">
+
+                        {{ tipo.nombre }}
+
+                    </option>
+
+                    {% endfor %}
+
+                </select>
+
+
+                <!-- ========================= -->
+                <!-- SALARIO -->
+                <!-- ========================= -->
+
+                <div id="campo_salario"
+                     class="campo-dinamico">
+
+                    <input type="number"
+                           step="0.01"
+                           name="valor_manual"
+                           placeholder="Salario bruto">
+
+                </div>
+
+
+                <!-- ========================= -->
+                <!-- TOQUES -->
+                <!-- ========================= -->
+
+                <div id="campo_toques"
+                     class="campo-dinamico">
+
+                    <input type="number"
+                           name="cantidad"
+                           placeholder="Cantidad de toques">
+
+                </div>
+
+
+                <!-- ========================= -->
+                <!-- OTROS -->
+                <!-- ========================= -->
+
+                <div id="campo_otro"
+                     class="campo-dinamico">
+
+                    <input type="text"
+                           name="concepto_otro"
+                           placeholder="Concepto del ingreso">
+
+                    <input type="number"
+                           step="0.01"
+                           name="valor_manual"
+                           placeholder="Valor del ingreso">
+
+                </div>
+
+
+                <!-- ========================= -->
+                <!-- FECHA -->
+                <!-- ========================= -->
+
+                <input type="date"
+                       name="fecha"
+                       required>
+
+
+                <!-- ========================= -->
+                <!-- BOTON -->
+                <!-- ========================= -->
+
+                <button type="submit">
+                    Guardar Ingreso
+                </button>
+
             </form>
+
         </div>
 
     </div>
 
+
+    <!-- ========================= -->
+    <!-- TABLA INGRESOS -->
+    <!-- ========================= -->
+
     <div class="box">
-        <h3>GASTOS DEL MES</h3>
+
+        <h3>INGRESOS REGISTRADOS</h3>
 
         <table>
+
             <thead>
+
                 <tr>
+
                     <th>Fecha</th>
+
+                    <th>Tipo</th>
+
                     <th>Concepto</th>
-                    <th>Valor</th>
+
+                    <th>Valor Unitario</th>
+
+                    <th>Cantidad</th>
+
+                    <th>Total</th>
+
                 </tr>
+
             </thead>
 
             <tbody>
-                {% for gasto in gastos %}
+
+                {% for ingreso in ingresos %}
+
                 <tr>
-                    <td>{{ gasto.fecha }}</td>
-                    <td>{{ gasto.concepto }}</td>
-                    <td>${{ "{:,.0f}".format(gasto.valor) }}</td>
+
+                    <td>
+                        {{ ingreso.fecha }}
+                    </td>
+
+                    <td>
+                        {{ ingreso.tipo_nombre }}
+                    </td>
+
+                    <td>
+
+                        {% if ingreso.concepto_otro %}
+
+                            {{ ingreso.concepto_otro }}
+
+                        {% else %}
+
+                            -
+
+                        {% endif %}
+
+                    </td>
+
+                    <td>
+                        ${{ "{:,.0f}".format(ingreso.valor_unitario) }}
+                    </td>
+
+                    <td>
+                        {{ ingreso.cantidad }}
+                    </td>
+
+                    <td>
+                        ${{ "{:,.0f}".format(ingreso.total) }}
+                    </td>
+
                 </tr>
+
                 {% endfor %}
+
             </tbody>
+
         </table>
+
+    </div>
+
+
+    <!-- ========================= -->
+    <!-- TABLA GASTOS -->
+    <!-- ========================= -->
+
+    <div class="box">
+
+        <h3>GASTOS DEL MES</h3>
+
+        <table>
+
+            <thead>
+
+                <tr>
+
+                    <th>Fecha</th>
+
+                    <th>Concepto</th>
+
+                    <th>Valor</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody>
+
+                {% for gasto in gastos %}
+
+                <tr>
+
+                    <td>
+                        {{ gasto.fecha }}
+                    </td>
+
+                    <td>
+                        {{ gasto.concepto }}
+                    </td>
+
+                    <td>
+                        ${{ "{:,.0f}".format(gasto.valor) }}
+                    </td>
+
+                </tr>
+
+                {% endfor %}
+
+            </tbody>
+
+        </table>
+
     </div>
 
 </div>
 
+
+<!-- ========================= -->
+<!-- JS -->
+<!-- ========================= -->
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+
 </body>
+
 </html>
