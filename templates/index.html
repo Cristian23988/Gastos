@@ -29,8 +29,12 @@
             Dashboard
         </a>
 
-        <a href="/maestras">
-            Configuración
+        <a href="/ingresos_mensuales">
+            Ingresos Mensuales
+        </a>
+
+        <a href="/gastos">
+            Gastos
         </a>
 
     </div>
@@ -85,151 +89,109 @@
 
 
     <!-- ========================= -->
-    <!-- FORMULARIOS -->
+    <!-- FILTRO DE MES -->
     <!-- ========================= -->
 
-    <div class="grid">
+    <div class="box">
 
-        <!-- ========================= -->
-        <!-- FORM GASTOS -->
-        <!-- ========================= -->
+        <form method="GET" action="/">
 
-        <div class="box">
+            <label class="month-filter">
+                <span>Ver mes:</span>
+                <select name="mes" onchange="this.form.submit()">
 
-            <h3>AGREGAR GASTO</h3>
-
-            <form method="POST"
-                  action="/guardar_gasto">
-
-                <input type="text"
-                       name="concepto"
-                       placeholder="Concepto del gasto"
-                       required>
-
-                <input type="number"
-                       step="0.01"
-                       name="valor"
-                       placeholder="Valor del gasto"
-                       required>
-
-                <input type="date"
-                       name="fecha"
-                       required>
-
-                <button type="submit">
-                    Guardar Gasto
-                </button>
-
-            </form>
-
-        </div>
-
-
-        <!-- ========================= -->
-        <!-- FORM INGRESOS -->
-        <!-- ========================= -->
-
-        <div class="box">
-
-            <h3>AGREGAR INGRESO</h3>
-
-            <form method="POST"
-                  action="/guardar_ingreso">
-
-                <!-- SELECT TIPO -->
-
-                <select
-                    name="tipo_ingreso"
-                    id="tipo_ingreso"
-                    required>
-
-                    <option value="">
-                        Selecciona ingreso
+                    {% for mes in available_meses %}
+                    <option value="{{ mes }}" {% if mes == mes_actual %}selected{% endif %}>
+                        {{ mes }}
                     </option>
-
-                    {% for tipo in tipos_ingreso %}
-
-                    <option
-                        value="{{ tipo.id }}"
-                        data-tipo="{{ tipo.tipo_calculo }}">
-
-                        {{ tipo.nombre }}
-
-                    </option>
-
                     {% endfor %}
 
                 </select>
+            </label>
+
+        </form>
+
+    </div>
 
 
-                <!-- ========================= -->
-                <!-- SALARIO -->
-                <!-- ========================= -->
+    <!-- ========================= -->
+    <!-- INFORMACIÓN PRINCIPAL -->
+    <!-- ========================= -->
 
-                <div id="campo_salario"
-                     class="campo-dinamico">
+    <div class="box">
 
-                    <input type="number"
-                           step="0.01"
-                           name="valor_manual"
-                           placeholder="Salario bruto">
+        <h3>Resumen de {{ mes_actual }}</h3>
 
-                </div>
+        <div class="stats-grid">
 
+            <div class="stat-card">
+                <strong>Ingreso</strong>
+                <p>${{ "{:,.0f}".format(total_ingresos) }}</p>
+            </div>
 
-                <!-- ========================= -->
-                <!-- TOQUES -->
-                <!-- ========================= -->
+            <div class="stat-card">
+                <strong>Gasto</strong>
+                <p>${{ "{:,.0f}".format(total_gastos) }}</p>
+            </div>
 
-                <div id="campo_toques"
-                     class="campo-dinamico">
+            <div class="stat-card">
+                <strong>Balance</strong>
+                <p>${{ "{:,.0f}".format(balance) }}</p>
+            </div>
 
-                    <input type="number"
-                           name="cantidad"
-                           placeholder="Cantidad de toques">
+            <div class="stat-card">
+                <strong>Mes anterior</strong>
+                <p>{{ mes_anterior or 'N/A' }}</p>
+            </div>
 
-                </div>
+            <div class="stat-card">
+                <strong>Balance anterior</strong>
+                <p>${{ "{:,.0f}".format(prev_balance) }}</p>
+            </div>
 
-
-                <!-- ========================= -->
-                <!-- OTROS -->
-                <!-- ========================= -->
-
-                <div id="campo_otro"
-                     class="campo-dinamico">
-
-                    <input type="text"
-                           name="concepto_otro"
-                           placeholder="Concepto del ingreso">
-
-                    <input type="number"
-                           step="0.01"
-                           name="valor_manual"
-                           placeholder="Valor del ingreso">
-
-                </div>
-
-
-                <!-- ========================= -->
-                <!-- FECHA -->
-                <!-- ========================= -->
-
-                <input type="date"
-                       name="fecha"
-                       required>
-
-
-                <!-- ========================= -->
-                <!-- BOTON -->
-                <!-- ========================= -->
-
-                <button type="submit">
-                    Guardar Ingreso
-                </button>
-
-            </form>
+            <div class="stat-card">
+                <strong>Comparación</strong>
+                <p>{{ comparacion_text }}</p>
+            </div>
 
         </div>
+
+    </div>
+
+
+    <div class="box">
+
+        <h3>Gastos por día</h3>
+
+        {% if gastos_por_dia %}
+
+        <div class="chart-wrapper">
+
+            {% for punto in gastos_por_dia %}
+
+            <div class="chart-bar"
+                 style="height: {{ punto.height }}px;"
+                 title="Día {{ punto.day }}: ${{ "{:,.0f}".format(punto.total) }}">
+
+                <span>{{ punto.day }}</span>
+
+            </div>
+
+            {% endfor %}
+
+        </div>
+
+        <p class="chart-summary">
+            Mayor gasto: día {{ mayor_dia_gasto.day }} con
+            ${{ "{:,.0f}".format(mayor_dia_gasto.total) }}.
+            Promedio diario: ${{ "{:,.0f}".format(gasto_promedio) }}.
+        </p>
+
+        {% else %}
+
+        <p>No hay gastos registrados para este mes.</p>
+
+        {% endif %}
 
     </div>
 

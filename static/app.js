@@ -1,9 +1,11 @@
-alert("JS CARGADO");
-
 document.addEventListener("DOMContentLoaded", () => {
 
     const tipoIngreso =
     document.getElementById("tipo_ingreso");
+
+    if (!tipoIngreso) {
+        return;
+    }
 
     const campoSalario =
     document.getElementById("campo_salario");

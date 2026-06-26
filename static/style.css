@@ -450,6 +450,78 @@ table tr:hover{
 }
 
 
+.month-filter{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    font-size:15px;
+    color:#d7ddf5;
+}
+
+.month-filter select{
+    max-width:320px;
+}
+
+.stats-grid{
+    display:grid;
+    grid-template-columns:repeat(3, minmax(180px, 1fr));
+    gap:18px;
+}
+
+.stat-card{
+    background:rgba(255,255,255,0.05);
+    border:1px solid rgba(255,255,255,0.08);
+    border-radius:18px;
+    padding:20px;
+}
+
+.stat-card strong{
+    display:block;
+    color:#9aa4c7;
+    margin-bottom:12px;
+    letter-spacing:1px;
+    font-size:13px;
+}
+
+.stat-card p{
+    font-size:26px;
+    font-weight:700;
+    color:#fff;
+}
+
+.chart-wrapper{
+    display:flex;
+    align-items:flex-end;
+    gap:10px;
+    min-height:160px;
+    padding:20px 0 10px;
+    overflow-x:auto;
+}
+
+.chart-bar{
+    width:32px;
+    background:linear-gradient(180deg, #00e5ff, #7b61ff);
+    border-radius:18px 18px 0 0;
+    position:relative;
+    flex-shrink:0;
+}
+
+.chart-bar span{
+    position:absolute;
+    top:-24px;
+    left:50%;
+    transform:translateX(-50%);
+    font-size:12px;
+    color:#c7d0f0;
+}
+
+.chart-summary{
+    margin-top:14px;
+    color:#c7d0f0;
+    font-size:15px;
+}
+
+
 /* ===================================== */
 /* SCROLLBAR */
 /* ===================================== */

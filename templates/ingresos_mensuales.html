@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Ingresos Mensuales</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+
+</head>
+
+<body>
+
+<div class="container">
+
+    <div class="topbar">
+
+        <a href="/">
+            Dashboard
+        </a>
+
+        <a href="/ingresos_mensuales">
+            Ingresos Mensuales
+        </a>
+
+        <a href="/gastos">
+            Gastos
+        </a>
+
+    </div>
+
+    <h1>INGRESOS MENSUALES</h1>
+
+    <h2>{{ mes_actual }}</h2>
+
+    <div class="box">
+
+        <p>
+            Configura los ingresos del mes actual. Si es la primera vez en este mes, se creó
+            una plantilla de ingresos para que modifiques los valores.
+        </p>
+
+        <button id="btnAgregarIngreso" onclick="document.getElementById('nuevoIngresoForm').style.display='block'; this.style.display='none';">
+            Agregar ingreso adicional
+        </button>
+
+        <div id="nuevoIngresoForm" class="box" style="display:none; margin-top: 1rem;">
+
+            <h3>Nuevo ingreso adicional</h3>
+
+            <form method="POST" action="/guardar_ingreso">
+
+                <select name="tipo_ingreso" required>
+                    <option value="">Selecciona ingreso</option>
+                    {% for tipo in tipos %}
+                    <option value="{{ tipo.id }}" data-tipo="{{ tipo.tipo_calculo }}">
+                        {{ tipo.nombre }}
+                    </option>
+                    {% endfor %}
+                </select>
+
+                <input type="number"
+                       step="0.01"
+                       name="valor_manual"
+                       placeholder="Valor del ingreso"
+                       required>
+
+                <input type="number"
+                       name="cantidad"
+                       placeholder="Cantidad (solo para toques)">
+
+                <input type="text"
+                       name="concepto_otro"
+                       placeholder="Concepto (solo para otro)">
+
+                <input type="date"
+                       name="fecha"
+                       required>
+
+                <button type="submit">
+                    Guardar ingreso adicional
+                </button>
+            </form>
+
+        </div>
+
+    </div>
+
+    <div class="box">
+
+        <table>
+
+            <thead>
+
+                <tr>
+
+                    <th>Tipo</th>
+
+                    <th>Concepto</th>
+
+                    <th>Valor Unitario</th>
+
+                    <th>Cantidad</th>
+
+                    <th>Total</th>
+
+                    <th>Acción</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody>
+
+                {% for ingreso in ingresos %}
+
+                <tr>
+
+                    <form method="POST"
+                          action="/actualizar_ingreso_mensual">
+
+                        <td>
+                            {{ ingreso.tipo_nombre }}
+                        </td>
+
+                        <td>
+                            {% if ingreso.tipo_calculo == 'otro' %}
+                                <input type="text"
+                                       name="concepto_otro"
+                                       value="{{ ingreso.concepto_otro or '' }}"
+                                       placeholder="Concepto del ingreso">
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            {% if ingreso.tipo_calculo == 'toques' %}
+                                <input type="number"
+                                       step="0.01"
+                                       name="valor_unitario"
+                                       value="{{ ingreso.valor_unitario }}">
+                            {% else %}
+                                <input type="number"
+                                       step="0.01"
+                                       name="valor_manual"
+                                       value="{{ ingreso.valor_unitario }}">
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            {% if ingreso.tipo_calculo == 'toques' %}
+                                <input type="number"
+                                       name="cantidad"
+                                       value="{{ ingreso.cantidad }}">
+                            {% else %}
+                                1
+                                <input type="hidden"
+                                       name="cantidad"
+                                       value="1">
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            ${{ "{:,.0f}".format(ingreso.total) }}
+                        </td>
+
+                        <td>
+                            <input type="hidden"
+                                   name="ingreso_id"
+                                   value="{{ ingreso.id }}">
+
+                            <input type="hidden"
+                                   name="tipo_calculo"
+                                   value="{{ ingreso.tipo_calculo }}">
+
+                            <button type="submit">
+                                Guardar
+                            </button>
+                        </td>
+
+                    </form>
+
+                </tr>
+
+                {% endfor %}
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</div>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+
+</body>
+
+</html>
