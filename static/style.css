@@ -70,9 +70,7 @@ body{
 
     border:1px solid rgba(255,255,255,0.08);
 
-    backdrop-filter:blur(12px);
-
-    transition:0.25s;
+    transition:0.15s;
 
     font-size:14px;
 
@@ -83,7 +81,7 @@ body{
 
 .topbar a:hover{
 
-    transform:translateY(-3px);
+    transform:translateY(-2px);
 
     background:linear-gradient(
         90deg,
@@ -92,7 +90,7 @@ body{
     );
 
     box-shadow:
-    0 0 20px rgba(123,97,255,0.35);
+    0 0 15px rgba(123,97,255,0.25);
 }
 
 
@@ -157,11 +155,9 @@ h2{
 
     min-width:260px;
 
-    background:rgba(17, 22, 36, 0.72);
+    background:rgba(17, 22, 36, 0.85);
 
     border:1px solid rgba(255,255,255,0.08);
-
-    backdrop-filter:blur(18px);
 
     border-radius:24px;
 
@@ -171,10 +167,10 @@ h2{
 
     overflow:hidden;
 
-    transition:0.25s;
+    transition:transform 0.2s, box-shadow 0.2s;
 
     box-shadow:
-    0 0 25px rgba(0,229,255,0.08);
+    0 0 25px rgba(0,229,255,0.05);
 }
 
 .card::before{
@@ -189,21 +185,23 @@ h2{
 
     background:radial-gradient(
         circle,
-        rgba(0,229,255,0.18),
+        rgba(0,229,255,0.08),
         transparent 70%
     );
 
     top:-120px;
 
     right:-100px;
+
+    pointer-events:none;
 }
 
 .card:hover{
 
-    transform:translateY(-6px);
+    transform:translateY(-3px);
 
     box-shadow:
-    0 0 35px rgba(123,97,255,0.3);
+    0 0 30px rgba(123,97,255,0.2);
 }
 
 .card h3{
@@ -249,20 +247,52 @@ h2{
 
 .box{
 
-    background:rgba(17, 22, 36, 0.72);
+    background:rgba(17, 22, 36, 0.85);
 
     border:1px solid rgba(255,255,255,0.08);
-
-    backdrop-filter:blur(18px);
 
     border-radius:24px;
 
     padding:30px;
 
     margin-bottom:25px;
+    overflow:hidden;
 
     box-shadow:
-    0 0 20px rgba(0,229,255,0.05);
+    0 0 20px rgba(0,229,255,0.03);
+}
+
+.analytics-grid{
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+    gap:24px;
+    margin-bottom:25px;
+}
+
+.analytics-grid .box{
+    margin-bottom:0;
+    height:100%;
+}
+
+.box.full-width{
+    grid-column:1 / -1;
+}
+
+.chart-container{
+    position:relative;
+    width:100%;
+    height:280px;
+    margin-top:12px;
+    display:flex;
+    align-items:stretch;
+}
+
+.chart-container canvas{
+    display:block;
+    width:100% !important;
+    height:100% !important;
+    max-width:100%;
+    max-height:100%;
 }
 
 .box h3{
@@ -307,7 +337,7 @@ select{
 
     font-size:15px;
 
-    transition:0.2s;
+    transition:border-color 0.15s, box-shadow 0.15s;
 }
 
 input:focus,
@@ -334,21 +364,6 @@ input::placeholder{
 .campo-dinamico{
 
     display:none;
-
-    animation:fadeIn 0.25s ease;
-}
-
-@keyframes fadeIn{
-
-    from{
-        opacity:0;
-        transform:translateY(5px);
-    }
-
-    to{
-        opacity:1;
-        transform:translateY(0);
-    }
 }
 
 
@@ -383,15 +398,15 @@ button{
 
     cursor:pointer;
 
-    transition:0.25s;
+    transition:transform 0.15s, box-shadow 0.15s;
 }
 
 button:hover{
 
-    transform:translateY(-3px);
+    transform:translateY(-2px);
 
     box-shadow:
-    0 0 25px rgba(123,97,255,0.45);
+    0 0 20px rgba(123,97,255,0.3);
 }
 
 
@@ -406,6 +421,33 @@ table{
     border-collapse:collapse;
 
     overflow:hidden;
+}
+
+/* Desktop: normal table layout */
+@media(min-width:901px){
+    table{
+        display:table;
+        width:100%;
+    }
+
+    table thead,
+    table tbody{
+        display:table-row-group;
+        width:100%;
+    }
+
+    table th,
+    table td{
+        white-space:normal;
+        overflow:visible;
+        text-overflow:clip;
+        padding:18px;
+    }
+}
+
+/* Use fixed table layout to keep cells from expanding and allow inputs to size correctly */
+table{
+    table-layout:fixed;
 }
 
 table thead{
@@ -439,9 +481,19 @@ table td{
     font-size:14px;
 }
 
+/* Make inputs and selects inside table cells responsive */
+table td input,
+table td select{
+    width:100%;
+    min-width:0;
+    box-sizing:border-box;
+    padding:12px;
+    font-size:14px;
+}
+
 table tr{
 
-    transition:0.2s;
+    transition:background 0.1s;
 }
 
 table tr:hover{
@@ -464,7 +516,7 @@ table tr:hover{
 
 .stats-grid{
     display:grid;
-    grid-template-columns:repeat(3, minmax(180px, 1fr));
+    grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));
     gap:18px;
 }
 
@@ -577,17 +629,61 @@ table tr:hover{
         display:none;
     }
 
+    /* Ajustes para la rejilla de resumen en móviles */
+    .stats-grid{
+        grid-template-columns:1fr;
+        gap:12px;
+    }
+
+    .stat-card{
+        padding:14px;
+    }
+
     .topbar{
         flex-direction:column;
     }
 
+    /* Simple table scroll on mobile without layout transformation */
     table{
         display:block;
+        width:100%;
+        font-size:12px;
         overflow-x:auto;
+        -webkit-overflow-scrolling:touch;
+        border-collapse:collapse;
+    }
+
+    table thead,
+    table tbody{
+        display:table;
+        width:auto;
+        min-width:100%;
+    }
+
+    table th,
+    table td{
+        padding:10px 6px;
+        white-space:nowrap;
+        overflow:hidden;
+        text-overflow:ellipsis;
+        flex-shrink:0;
+    }
+
+    .container{
+        width:95%;
+        padding:20px 0;
+    }
+
+    .box{
+        padding:20px;
+        margin-bottom:20px;
+    }
+
+    .card{
+        padding:20px;
     }
 
     .campo-dinamico{
-
-    display: none;
-}
+        display:none;
+    }
 }

@@ -649,6 +649,9 @@ def guardar_ingreso():
         ) or 1
     )
 
+    # Calcular mes a partir de la fecha
+    mes = format_mes_label(datetime.strptime(fecha, "%Y-%m-%d"))
+
     conn = get_connection()
     cur = conn.cursor()
 
@@ -740,6 +743,66 @@ def guardar_ingreso():
     conn.close()
 
     return redirect("/ingresos_mensuales")
+
+
+# ==================================================
+# ANÁLISIS COMPARATIVO DE MESES
+# ==================================================
+
+@app.route("/analisis")
+def analisis():
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    # Obtener lista de meses disponibles
+    all_meses_ingresos = cur.execute("SELECT DISTINCT mes FROM ingresos WHERE mes IS NOT NULL ORDER BY mes DESC").fetchall()
+    all_meses_gastos = cur.execute("SELECT DISTINCT mes FROM gastos WHERE mes IS NOT NULL ORDER BY mes DESC").fetchall()
+    
+    all_meses_set = set()
+    for row in all_meses_ingresos:
+        if row["mes"]:
+            all_meses_set.add(row["mes"])
+    for row in all_meses_gastos:
+        if row["mes"]:
+            all_meses_set.add(row["mes"])
+    
+    all_meses = sorted(
+        [m for m in all_meses_set if parse_mes_label(m)],
+        key=lambda m: parse_mes_label(m),
+        reverse=True
+    )
+
+    # Parámetros de filtro
+    meses_seleccionados = request.args.getlist("meses")
+    if not meses_seleccionados:
+        meses_seleccionados = all_meses[:3] if len(all_meses) >= 3 else all_meses
+
+    # Recopilar datos para cada mes
+    datos_meses = []
+    for mes in meses_seleccionados:
+        ingresos_total = cur.execute("SELECT SUM(total) as total FROM ingresos WHERE mes = ?", (mes,)).fetchone()
+        gastos_total = cur.execute("SELECT SUM(valor) as total FROM gastos WHERE mes = ?", (mes,)).fetchone()
+        
+        ingresos_val = ingresos_total["total"] or 0
+        gastos_val = gastos_total["total"] or 0
+        balance_val = ingresos_val - gastos_val
+        
+        datos_meses.append({
+            "mes": mes,
+            "ingresos": ingresos_val,
+            "gastos": gastos_val,
+            "balance": balance_val
+        })
+
+    conn.close()
+
+    return render_template(
+        "analisis.html",
+        all_meses=all_meses,
+        meses_seleccionados=meses_seleccionados,
+        datos_meses=datos_meses
+    )
 
 
 # ==================================================

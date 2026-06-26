@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Análisis de Gastos</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+
+</head>
+
+<body>
+
+<div class="container">
+
+    <!-- TOPBAR -->
+    <div class="topbar">
+        <a href="/">Dashboard</a>
+        <a href="/ingresos_mensuales">Ingresos Mensuales</a>
+        <a href="/gastos">Gastos</a>
+        <a href="/analisis">Análisis</a>
+    </div>
+
+    <h1>ANÁLISIS COMPARATIVO</h1>
+    <h2>Estadísticas de Gastos e Ingresos</h2>
+
+    <!-- SELECTOR DE MESES -->
+    <div class="box">
+        <h3>Selecciona meses a comparar</h3>
+        <form method="GET" action="/analisis">
+            <div class="mes-checkboxes">
+                {% for mes in all_meses %}
+                <label class="checkbox-label">
+                    <input type="checkbox" name="meses" value="{{ mes }}"
+                           {% if mes in meses_seleccionados %}checked{% endif %}>
+                    {{ mes }}
+                </label>
+                {% endfor %}
+            </div>
+            <button type="submit">Actualizar Análisis</button>
+        </form>
+    </div>
+
+    <!-- GRÁFICAS -->
+    {% if datos_meses %}
+
+    <div class="box full-width">
+        <h3>Comparativa de Ingresos, Gastos y Balance</h3>
+        <div class="chart-container">
+            <canvas id="chartComparativa"></canvas>
+        </div>
+    </div>
+
+    <div class="analytics-grid">
+        <div class="box">
+            <h3>Ingresos por Mes</h3>
+            <div class="chart-container">
+                <canvas id="chartIngresos"></canvas>
+            </div>
+        </div>
+
+        <div class="box">
+            <h3>Gastos por Mes</h3>
+            <div class="chart-container">
+                <canvas id="chartGastos"></canvas>
+            </div>
+        </div>
+
+        <div class="box full-width">
+            <h3>Balance por Mes</h3>
+            <div class="chart-container">
+                <canvas id="chartBalance"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- TABLA RESUMEN -->
+    <div class="box">
+        <h3>Resumen Detallado</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Mes</th>
+                    <th>Ingresos</th>
+                    <th>Gastos</th>
+                    <th>Balance</th>
+                    <th>% Gasto</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for dato in datos_meses %}
+                <tr>
+                    <td>{{ dato.mes }}</td>
+                    <td>${{ "{:,.0f}".format(dato.ingresos) }}</td>
+                    <td>${{ "{:,.0f}".format(dato.gastos) }}</td>
+                    <td>${{ "{:,.0f}".format(dato.balance) }}</td>
+                    <td>
+                        {% if dato.ingresos > 0 %}
+                            {{ "{:.1f}".format((dato.gastos / dato.ingresos) * 100) }}%
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% else %}
+
+    <div class="box">
+        <p>No hay datos disponibles para los meses seleccionados.</p>
+    </div>
+
+    {% endif %}
+
+</div>
+
+<script>
+
+    // Datos para gráficas
+    const meses = [
+        {% for dato in datos_meses %}
+            '{{ dato.mes }}'{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ];
+
+    const ingresos = [
+        {% for dato in datos_meses %}
+            {{ dato.ingresos }}{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ];
+
+    const gastos = [
+        {% for dato in datos_meses %}
+            {{ dato.gastos }}{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ];
+
+    const balances = [
+        {% for dato in datos_meses %}
+            {{ dato.balance }}{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ];
+
+    // Colores
+    const colorIngresos = '#00e5ff';
+    const colorGastos = '#ff4fd8';
+    const colorBalance = '#7b61ff';
+    const colorFondo = 'rgba(123, 97, 255, 0.1)';
+
+    // Gráfica Comparativa
+    const ctxComparativa = document.getElementById('chartComparativa').getContext('2d');
+    new Chart(ctxComparativa, {
+        type: 'bar',
+        data: {
+            labels: meses,
+            datasets: [
+                {
+                    label: 'Ingresos',
+                    data: ingresos,
+                    backgroundColor: colorIngresos,
+                    borderColor: colorIngresos,
+                    borderWidth: 2
+                },
+                {
+                    label: 'Gastos',
+                    data: gastos,
+                    backgroundColor: colorGastos,
+                    borderColor: colorGastos,
+                    borderWidth: 2
+                },
+                {
+                    label: 'Balance',
+                    data: balances,
+                    backgroundColor: colorBalance,
+                    borderColor: colorBalance,
+                    borderWidth: 2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: {
+                padding: { top: 8, right: 8, bottom: 0, left: 0 }
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    labels: {
+                        color: '#d7ddf5',
+                        font: { size: 13 },
+                        padding: 15,
+                        boxWidth: 15
+                    },
+                    padding: 20
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { 
+                        color: '#9fb0e0',
+                        font: { size: 11 },
+                        padding: 12,
+                        maxTicksLimit: 6
+                    },
+                    grid: { color: 'rgba(255,255,255,0.05)' }
+                },
+                x: {
+                    ticks: { 
+                        color: '#9fb0e0',
+                        font: { size: 12 },
+                        padding: 12,
+                        maxRotation: 0,
+                        minRotation: 0
+                    },
+                    grid: { color: 'rgba(255,255,255,0.05)' }
+                }
+            }
+        }
+    });
+
+    // Gráfica Ingresos (Línea)
+    const ctxIngresos = document.getElementById('chartIngresos').getContext('2d');
+    new Chart(ctxIngresos, {
+        type: 'line',
+        data: {
+            labels: meses,
+            datasets: [{
+                label: 'Ingresos',
+                data: ingresos,
+                borderColor: colorIngresos,
+                backgroundColor: colorFondo,
+                borderWidth: 3,
+                fill: true,
+                tension: 0.4,
+                pointRadius: 6,
+                pointBackgroundColor: colorIngresos,
+                pointBorderColor: '#fff',
+                pointBorderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: {
+                padding: { top: 8, right: 8, bottom: 0, left: 0 }
+            },
+            plugins: {
+                legend: { display: false },
+                filler: { propagate: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { 
+                        color: '#9fb0e0',
+                        font: { size: 11 },
+                        padding: 12,
+                        maxTicksLimit: 6
+                    },
+                    grid: { color: 'rgba(255,255,255,0.05)' }
+                },
+                x: {
+                    ticks: { 
+                        color: '#9fb0e0',
+                        font: { size: 12 },
+                        padding: 12,
+                        maxRotation: 0,
+                        minRotation: 0
+                    },
+                    grid: { color: 'rgba(255,255,255,0.05)' }
+                }
+            }
+        }
+    });
+
+    // Gráfica Gastos (Línea)
+    const ctxGastos = document.getElementById('chartGastos').getContext('2d');
+    new Chart(ctxGastos, {
+        type: 'line',
+        data: {
+            labels: meses,
+            datasets: [{
+                label: 'Gastos',
+                data: gastos,
+                borderColor: colorGastos,
+                backgroundColor: colorFondo,
+                borderWidth: 3,
+                fill: true,
+                tension: 0.4,
+                pointRadius: 6,
+                pointBackgroundColor: colorGastos,
+                pointBorderColor: '#fff',
+                pointBorderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: {
+                padding: { top: 8, right: 8, bottom: 0, left: 0 }
+            },
+            plugins: {
+                legend: { display: false },
+                filler: { propagate: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { 
+                        color: '#9fb0e0',
+                        font: { size: 11 },
+                        padding: 12,
+                        maxTicksLimit: 6
+                    },
+                    grid: { color: 'rgba(255,255,255,0.05)' }
+                },
+                x: {
+                    ticks: { 
+                        color: '#9fb0e0',
+                        font: { size: 12 },
+                        padding: 12,
+                        maxRotation: 0,
+                        minRotation: 0
+                    },
+                    grid: { color: 'rgba(255,255,255,0.05)' }
+                }
+            }
+        }
+    });
+
+    // Gráfica Balance (Línea)
+    const ctxBalance = document.getElementById('chartBalance').getContext('2d');
+    new Chart(ctxBalance, {
+        type: 'line',
+        data: {
+            labels: meses,
+            datasets: [{
+                label: 'Balance',
+                data: balances,
+                borderColor: colorBalance,
+                backgroundColor: colorFondo,
+                borderWidth: 3,
+                fill: true,
+                tension: 0.4,
+                pointRadius: 6,
+                pointBackgroundColor: colorBalance,
+                pointBorderColor: '#fff',
+                pointBorderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: {
+                padding: { top: 8, right: 8, bottom: 0, left: 0 }
+            },
+            plugins: {
+                legend: { display: false },
+                filler: { propagate: false }
+            },
+            scales: {
+                y: {
+                    ticks: { 
+                        color: '#9fb0e0',
+                        font: { size: 11 },
+                        padding: 12,
+                        maxTicksLimit: 3,
+                        stepSize: 2000000
+                    },
+                    grid: { color: 'rgba(255,255,255,0.05)' }
+                },
+                x: {
+                    ticks: { 
+                        color: '#9fb0e0',
+                        font: { size: 12 },
+                        padding: 12,
+                        maxRotation: 0,
+                        minRotation: 0
+                    },
+                    grid: { color: 'rgba(255,255,255,0.05)' }
+                }
+            }
+        }
+    });
+
+</script>
+
+<style>
+    .mes-checkboxes {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+
+    .checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        color: #d7ddf5;
+        font-size: 14px;
+    }
+
+    .checkbox-label input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+        accent-color: #00e5ff;
+    }
+
+    @media(max-width: 900px) {
+        .mes-checkboxes {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+</style>
+
+</body>
+
+</html>
