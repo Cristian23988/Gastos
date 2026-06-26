@@ -556,6 +556,7 @@ table tr:hover{
 
     .cards{
         flex-direction:column;
+        gap:18px;
     }
 
     h1{
@@ -564,6 +565,16 @@ table tr:hover{
 
     .card p{
         font-size:28px;
+    }
+
+    /* Allow cards to shrink to container width on small screens and hide decorative overflow */
+    .card{
+        min-width:0;
+        width:100%;
+    }
+
+    .card::before{
+        display:none;
     }
 
     .topbar{
