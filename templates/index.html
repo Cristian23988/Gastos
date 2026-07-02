@@ -1,146 +1,71 @@
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
-
     <meta charset="UTF-8">
-
-    <meta name="viewport"
-          content="width=device-width, initial-scale=1.0">
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Control de Gastos</title>
-
-    <link rel="stylesheet"
-          href="{{ url_for('static', filename='style.css') }}">
-
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-
 <body>
-
 <div class="container">
-
-    <!-- ========================= -->
-    <!-- TOPBAR -->
-    <!-- ========================= -->
-
     <div class="topbar">
-
-        <a href="/">
-            Dashboard
-        </a>
-
-        <a href="/ingresos_mensuales">
-            Ingresos Mensuales
-        </a>
-
-        <a href="/gastos">
-            Gastos
-        </a>
-
-        <a href="/analisis">
-            Análisis
-        </a>
-
+        <a href="/">Dashboard</a>
+        <a href="/ingresos_mensuales">Ingresos Mensuales</a>
+        <a href="/gastos">Gastos</a>
+        <a href="/analisis">Análisis</a>
     </div>
-
-
-    <!-- ========================= -->
-    <!-- HEADER -->
-    <!-- ========================= -->
 
     <h1>CONTROL DE GASTOS</h1>
-
     <h2>{{ mes_actual }}</h2>
 
-
-    <!-- ========================= -->
-    <!-- CARDS -->
-    <!-- ========================= -->
-
     <div class="cards">
-
         <div class="card">
-
             <h3>INGRESOS</h3>
-
-            <p>
-                ${{ "{:,.0f}".format(total_ingresos) }}
-            </p>
-
+            <p>{{ total_ingresos|pesos }}</p>
         </div>
 
         <div class="card">
-
             <h3>GASTOS</h3>
-
-            <p>
-                ${{ "{:,.0f}".format(total_gastos) }}
-            </p>
-
+            <p>{{ total_gastos|pesos }}</p>
         </div>
 
         <div class="card">
-
             <h3>BALANCE</h3>
-
-            <p>
-                ${{ "{:,.0f}".format(balance) }}
-            </p>
-
+            <p>{{ balance|pesos }}</p>
         </div>
-
     </div>
 
-
-    <!-- ========================= -->
-    <!-- FILTRO DE MES -->
-    <!-- ========================= -->
-
     <div class="box">
-
         <form method="GET" action="/">
-
             <label class="month-filter">
                 <span>Ver mes:</span>
                 <select name="mes" onchange="this.form.submit()">
-
                     {% for mes in available_meses %}
                     <option value="{{ mes }}" {% if mes == mes_actual %}selected{% endif %}>
                         {{ mes }}
                     </option>
                     {% endfor %}
-
                 </select>
             </label>
-
         </form>
-
     </div>
 
-
-    <!-- ========================= -->
-    <!-- INFORMACIÓN PRINCIPAL -->
-    <!-- ========================= -->
-
     <div class="box">
-
         <h3>Resumen de {{ mes_actual }}</h3>
-
         <div class="stats-grid">
-
             <div class="stat-card">
                 <strong>Ingreso</strong>
-                <p>${{ "{:,.0f}".format(total_ingresos) }}</p>
+                <p>{{ total_ingresos|pesos }}</p>
             </div>
 
             <div class="stat-card">
                 <strong>Gasto</strong>
-                <p>${{ "{:,.0f}".format(total_gastos) }}</p>
+                <p>{{ total_gastos|pesos }}</p>
             </div>
 
             <div class="stat-card">
                 <strong>Balance</strong>
-                <p>${{ "{:,.0f}".format(balance) }}</p>
+                <p>{{ balance|pesos }}</p>
             </div>
 
             <div class="stat-card">
@@ -150,198 +75,92 @@
 
             <div class="stat-card">
                 <strong>Balance anterior</strong>
-                <p>${{ "{:,.0f}".format(prev_balance) }}</p>
+                <p>{{ prev_balance|pesos }}</p>
             </div>
 
             <div class="stat-card">
                 <strong>Comparación</strong>
                 <p>{{ comparacion_text }}</p>
             </div>
-
         </div>
-
     </div>
 
-
     <div class="box">
-
         <h3>Gastos por día</h3>
-
         {% if gastos_por_dia %}
-
         <div class="chart-wrapper">
-
             {% for punto in gastos_por_dia %}
-
-            <div class="chart-bar"
-                 style="height: {{ punto.height }}px;"
-                 title="Día {{ punto.day }}: ${{ "{:,.0f}".format(punto.total) }}">
-
+            <div class="chart-bar" style="height: {{ punto.height }}px;" title="Día {{ punto.day }}: {{ punto.total|pesos }}">
                 <span>{{ punto.day }}</span>
-
             </div>
-
             {% endfor %}
-
         </div>
-
         <p class="chart-summary">
-            Mayor gasto: día {{ mayor_dia_gasto.day }} con
-            ${{ "{:,.0f}".format(mayor_dia_gasto.total) }}.
-            Promedio diario: ${{ "{:,.0f}".format(gasto_promedio) }}.
+            Mayor gasto: día {{ mayor_dia_gasto.day }} con {{ mayor_dia_gasto.total|pesos }}.
+            Promedio diario: {{ gasto_promedio|pesos }}.
         </p>
-
         {% else %}
-
         <p>No hay gastos registrados para este mes.</p>
-
         {% endif %}
-
     </div>
 
-
-    <!-- ========================= -->
-    <!-- TABLA INGRESOS -->
-    <!-- ========================= -->
-
     <div class="box">
-
         <h3>INGRESOS REGISTRADOS</h3>
-
-        <table>
-
+        <table class="table-6col">
             <thead>
-
                 <tr>
-
                     <th>Fecha</th>
-
                     <th>Tipo</th>
-
                     <th>Concepto</th>
-
                     <th>Valor Unitario</th>
-
                     <th>Cantidad</th>
-
                     <th>Total</th>
-
                 </tr>
-
             </thead>
-
             <tbody>
-
                 {% for ingreso in ingresos %}
-
                 <tr>
-
+                    <td>{{ ingreso.fecha|fecha_corta }}</td>
+                    <td>{{ ingreso.tipo_nombre }}</td>
                     <td>
-                        {{ ingreso.fecha }}
-                    </td>
-
-                    <td>
-                        {{ ingreso.tipo_nombre }}
-                    </td>
-
-                    <td>
-
                         {% if ingreso.concepto_otro %}
-
                             {{ ingreso.concepto_otro }}
-
                         {% else %}
-
                             -
-
                         {% endif %}
-
                     </td>
-
-                    <td>
-                        ${{ "{:,.0f}".format(ingreso.valor_unitario) }}
-                    </td>
-
-                    <td>
-                        {{ ingreso.cantidad }}
-                    </td>
-
-                    <td>
-                        ${{ "{:,.0f}".format(ingreso.total) }}
-                    </td>
-
+                    <td>{{ ingreso.valor_unitario|pesos }}</td>
+                    <td>{{ ingreso.cantidad }}</td>
+                    <td>{{ ingreso.total|pesos }}</td>
                 </tr>
-
                 {% endfor %}
-
             </tbody>
-
         </table>
-
     </div>
-
-
-    <!-- ========================= -->
-    <!-- TABLA GASTOS -->
-    <!-- ========================= -->
 
     <div class="box">
-
         <h3>GASTOS DEL MES</h3>
-
-        <table>
-
+        <table class="table-3col">
             <thead>
-
                 <tr>
-
                     <th>Fecha</th>
-
                     <th>Concepto</th>
-
                     <th>Valor</th>
-
                 </tr>
-
             </thead>
-
             <tbody>
-
                 {% for gasto in gastos %}
-
                 <tr>
-
-                    <td>
-                        {{ gasto.fecha }}
-                    </td>
-
-                    <td>
-                        {{ gasto.concepto }}
-                    </td>
-
-                    <td>
-                        ${{ "{:,.0f}".format(gasto.valor) }}
-                    </td>
-
+                    <td>{{ gasto.fecha|fecha_corta }}</td>
+                    <td>{{ gasto.concepto }}</td>
+                    <td>{{ gasto.valor|pesos }}</td>
                 </tr>
-
                 {% endfor %}
-
             </tbody>
-
         </table>
-
     </div>
-
 </div>
 
-
-<!-- ========================= -->
-<!-- JS -->
-<!-- ========================= -->
-
 <script src="{{ url_for('static', filename='app.js') }}"></script>
-
 </body>
-
 </html>

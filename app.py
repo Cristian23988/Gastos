@@ -198,6 +198,21 @@ MONTH_NAMES = {
     12: "DICIEMBRE",
 }
 
+MONTH_ABBR = {
+    1: "ENE",
+    2: "FEB",
+    3: "MAR",
+    4: "ABR",
+    5: "MAY",
+    6: "JUN",
+    7: "JUL",
+    8: "AGO",
+    9: "SEP",
+    10: "OCT",
+    11: "NOV",
+    12: "DIC",
+}
+
 
 def parse_mes_label(mes_label):
     if not mes_label:
@@ -220,6 +235,15 @@ def parse_mes_label(mes_label):
 
 def format_mes_label(date_obj):
     return f"{MONTH_NAMES[date_obj.month]} {date_obj.year}"
+
+def format_fecha_corta(date_obj):
+    return f"{str(date_obj.day).zfill(2)}-{MONTH_ABBR[date_obj.month].upper()}-{date_obj.year}"
+
+def format_pesos_colombianos(valor):
+    return f"${valor:,.0f}".replace(",", ".")
+
+def format_pesos_colombianos_decimal(valor):
+    return f"${valor:,.2f}".replace(",", ".")
 
 
 def get_previous_month_label(mes_label):
@@ -811,17 +835,38 @@ def analisis():
 
 # @app.route("/limpiar_db")
 # def limpiar_db():
-
 #     conn = get_connection()
 #     cur = conn.cursor()
-
 #     cur.execute("DELETE FROM gastos")
 #     cur.execute("DELETE FROM ingresos")
-
 #     conn.commit()
 #     conn.close()
-
 #     return "Base de datos limpiada"
+
+
+# ==================================================
+# REGISTRO DE FILTROS JINJA2
+# ==================================================
+
+def format_fecha_filtro(value):
+    if not value:
+        return ''
+    try:
+        fecha_obj = datetime.strptime(value, "%Y-%m-%d")
+        return format_fecha_corta(fecha_obj)
+    except:
+        return value
+
+app.jinja_env.filters['fecha_corta'] = format_fecha_filtro
+app.jinja_env.filters['pesos'] = format_pesos_colombianos
+app.jinja_env.filters['pesos_decimal'] = format_pesos_colombianos_decimal
+
+
+# ==================================================
+# INIT DB
+# ==================================================
+
+init_db()
 
 
 # ==================================================

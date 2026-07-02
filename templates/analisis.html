@@ -72,7 +72,7 @@
             </div>
         </div>
 
-        <div class="box full-width">
+        <div class="box">
             <h3>Balance por Mes</h3>
             <div class="chart-container">
                 <canvas id="chartBalance"></canvas>
@@ -124,6 +124,14 @@
 </div>
 
 <script>
+
+    // Función para obtener padding según tamaño de pantalla
+    function getPadding() {
+        if (window.innerWidth < 900) {
+            return { top: 8, right: 8, bottom: 0, left: 15 };  // Mobile
+        }
+        return { top: 8, right: 8, bottom: 0, left: 70 };  // Desktop
+    }
 
     // Datos para gráficas
     const meses = [
@@ -190,7 +198,7 @@
             responsive: true,
             maintainAspectRatio: false,
             layout: {
-                padding: { top: 8, right: 8, bottom: 0, left: 0 }
+                padding: getPadding()
             },
             plugins: {
                 legend: {
@@ -207,11 +215,20 @@
             scales: {
                 y: {
                     beginAtZero: true,
+                    grace: '10%',
                     ticks: { 
                         color: '#9fb0e0',
                         font: { size: 11 },
                         padding: 12,
-                        maxTicksLimit: 6
+                        maxTicksLimit: 6,
+                        callback: function(value) {
+                            if (value >= 1000000) {
+                                return '$' + (value / 1000000).toFixed(1) + 'M';
+                            } else if (value >= 1000) {
+                                return '$' + (value / 1000).toFixed(0) + 'K';
+                            }
+                            return '$' + value;
+                        }
                     },
                     grid: { color: 'rgba(255,255,255,0.05)' }
                 },
@@ -253,7 +270,7 @@
             responsive: true,
             maintainAspectRatio: false,
             layout: {
-                padding: { top: 8, right: 8, bottom: 0, left: 0 }
+                padding: getPadding()
             },
             plugins: {
                 legend: { display: false },
@@ -262,11 +279,20 @@
             scales: {
                 y: {
                     beginAtZero: true,
+                    grace: '10%',
                     ticks: { 
                         color: '#9fb0e0',
                         font: { size: 11 },
                         padding: 12,
-                        maxTicksLimit: 6
+                        maxTicksLimit: 6,
+                        callback: function(value) {
+                            if (value >= 1000000) {
+                                return '$' + (value / 1000000).toFixed(1) + 'M';
+                            } else if (value >= 1000) {
+                                return '$' + (value / 1000).toFixed(0) + 'K';
+                            }
+                            return '$' + value;
+                        }
                     },
                     grid: { color: 'rgba(255,255,255,0.05)' }
                 },
@@ -308,7 +334,7 @@
             responsive: true,
             maintainAspectRatio: false,
             layout: {
-                padding: { top: 8, right: 8, bottom: 0, left: 0 }
+                padding: getPadding()
             },
             plugins: {
                 legend: { display: false },
@@ -317,11 +343,20 @@
             scales: {
                 y: {
                     beginAtZero: true,
+                    grace: '10%',
                     ticks: { 
                         color: '#9fb0e0',
                         font: { size: 11 },
                         padding: 12,
-                        maxTicksLimit: 6
+                        maxTicksLimit: 6,
+                        callback: function(value) {
+                            if (value >= 1000000) {
+                                return '$' + (value / 1000000).toFixed(1) + 'M';
+                            } else if (value >= 1000) {
+                                return '$' + (value / 1000).toFixed(0) + 'K';
+                            }
+                            return '$' + value;
+                        }
                     },
                     grid: { color: 'rgba(255,255,255,0.05)' }
                 },
@@ -363,7 +398,7 @@
             responsive: true,
             maintainAspectRatio: false,
             layout: {
-                padding: { top: 8, right: 8, bottom: 0, left: 0 }
+                padding: getPadding()
             },
             plugins: {
                 legend: { display: false },
@@ -371,12 +406,20 @@
             },
             scales: {
                 y: {
+                    grace: '10%',
                     ticks: { 
                         color: '#9fb0e0',
                         font: { size: 11 },
                         padding: 12,
                         maxTicksLimit: 3,
-                        stepSize: 2000000
+                        callback: function(value) {
+                            if (value >= 1000000) {
+                                return '$' + (value / 1000000).toFixed(1) + 'M';
+                            } else if (value >= 1000) {
+                                return '$' + (value / 1000).toFixed(0) + 'K';
+                            }
+                            return '$' + value;
+                        }
                     },
                     grid: { color: 'rgba(255,255,255,0.05)' }
                 },
@@ -420,9 +463,37 @@
         accent-color: #00e5ff;
     }
 
+    /* Gráficas en desktop */
+    .chart-container canvas {
+        max-width: 100%;
+    }
+
     @media(max-width: 900px) {
         .mes-checkboxes {
             grid-template-columns: repeat(2, 1fr);
+        }
+
+        /* Reducir padding en mobile pero mantener suficiente para los labels */
+        .box .chart-container {
+            max-height: 300px;
+            margin-left: 0;
+        }
+
+        /* Ajustar font de labels en mobile */
+        .chart-container canvas {
+            max-width: 100% !important;
+            height: auto !important;
+        }
+    }
+
+    @media(max-width: 600px) {
+        .mes-checkboxes {
+            grid-template-columns: 1fr;
+        }
+
+        .box .chart-container {
+            max-height: 280px;
+            overflow: hidden;
         }
     }
 </style>
