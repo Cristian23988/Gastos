@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, redirect
 import sqlite3
 from datetime import datetime, timedelta
 import os
+from urllib.parse import quote
 
 app = Flask(__name__)
 
@@ -76,6 +77,25 @@ def init_db():
     )
     """)
 
+    # ==================================================
+    # TABLA GASTOS
+    # ==================================================
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS gastos (
+
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+        concepto TEXT NOT NULL,
+
+        valor REAL NOT NULL,
+
+        fecha TEXT NOT NULL,
+
+        mes TEXT NOT NULL
+    )
+    """)
+
     existing_columns = [row[1] for row in cur.execute("PRAGMA table_info(ingresos)")]
     if "mes" not in existing_columns:
         cur.execute("ALTER TABLE ingresos ADD COLUMN mes TEXT")
@@ -102,25 +122,6 @@ def init_db():
             normalized = format_mes_label(parsed)
             if normalized != m:
                 cur.execute("UPDATE gastos SET mes = ? WHERE mes = ?", (normalized, m))
-
-    # ==================================================
-    # TABLA GASTOS
-    # ==================================================
-
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS gastos (
-
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-        concepto TEXT NOT NULL,
-
-        valor REAL NOT NULL,
-
-        fecha TEXT NOT NULL,
-
-        mes TEXT NOT NULL
-    )
-    """)
 
     # ==================================================
     # INSERTAR MAESTRAS DEFAULT
@@ -255,6 +256,36 @@ def get_previous_month_label(mes_label):
     return format_mes_label(prev)
 
 
+def build_available_meses(cur, default_mes, extra_mes=None):
+    available_meses = set()
+    for row in cur.execute("SELECT mes FROM gastos").fetchall():
+        if row["mes"]:
+            available_meses.add(row["mes"].strip())
+    for row in cur.execute("SELECT mes FROM ingresos").fetchall():
+        if row["mes"]:
+            available_meses.add(row["mes"].strip())
+    available_meses.add(default_mes)
+    if extra_mes:
+        available_meses.add(extra_mes)
+
+    return sorted(
+        [m for m in available_meses if parse_mes_label(m)],
+        key=lambda m: parse_mes_label(m),
+        reverse=True
+    )
+
+
+def get_redirect_mes(default_mes=None):
+    mes = request.form.get("redirect_mes") or default_mes or format_mes_label(datetime.now())
+    if not parse_mes_label(mes):
+        mes = format_mes_label(datetime.now())
+    return mes
+
+
+def redirect_ingresos_mensuales(mes):
+    return redirect(f"/ingresos_mensuales?mes={quote(mes)}")
+
+
 # ==================================================
 # HOME
 # ==================================================
@@ -269,20 +300,7 @@ def index():
     default_mes = format_mes_label(datetime.now())
     mes_actual = requested_mes or default_mes
 
-    available_meses = set()
-    for row in cur.execute("SELECT mes FROM gastos").fetchall():
-        if row["mes"]:
-            available_meses.add(row["mes"].strip())
-    for row in cur.execute("SELECT mes FROM ingresos").fetchall():
-        if row["mes"]:
-            available_meses.add(row["mes"].strip())
-    available_meses.add(default_mes)
-
-    formatted_months = sorted(
-        [m for m in available_meses if parse_mes_label(m)],
-        key=lambda m: parse_mes_label(m),
-        reverse=True
-    )
+    formatted_months = build_available_meses(cur, default_mes)
 
     if not parse_mes_label(mes_actual):
         mes_actual = default_mes
@@ -402,8 +420,14 @@ def ingresos_mensuales():
     conn = get_connection()
     cur = conn.cursor()
 
-    mes_actual = format_mes_label(datetime.now())
-    fecha_inicio = datetime.now().replace(day=1).strftime("%Y-%m-%d")
+    requested_mes = request.args.get("mes")
+    default_mes = format_mes_label(datetime.now())
+    mes_actual = requested_mes or default_mes
+    if not parse_mes_label(mes_actual):
+        mes_actual = default_mes
+
+    fecha_inicio = parse_mes_label(mes_actual).strftime("%Y-%m-%d")
+    available_meses = build_available_meses(cur, default_mes, mes_actual)
 
     tipos = cur.execute("""
         SELECT *
@@ -423,57 +447,15 @@ def ingresos_mensuales():
         ORDER BY tipos_ingreso.nombre
     """, (mes_actual,)).fetchall()
 
-    existing_tipo_ids = {ingreso["tipo_ingreso_id"] for ingreso in ingresos}
-
-    if len(ingresos) != len(tipos):
-        for tipo in tipos:
-            if tipo["id"] not in existing_tipo_ids:
-                valor_unitario = tipo["valor_unitario"] if tipo["tipo_calculo"] == "toques" else 0
-                cantidad = 1
-                total = valor_unitario * cantidad if tipo["tipo_calculo"] == "toques" else 0
-
-                cur.execute("""
-                    INSERT INTO ingresos (
-                        tipo_ingreso_id,
-                        concepto_otro,
-                        valor_unitario,
-                        cantidad,
-                        total,
-                        fecha,
-                        mes
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    tipo["id"],
-                    "" if tipo["tipo_calculo"] == "otro" else "",
-                    valor_unitario,
-                    cantidad,
-                    total,
-                    fecha_inicio,
-                    mes_actual
-                ))
-
-        conn.commit()
-
-        ingresos = cur.execute("""
-            SELECT
-                ingresos.*,
-                tipos_ingreso.nombre AS tipo_nombre,
-                tipos_ingreso.tipo_calculo
-            FROM ingresos
-            INNER JOIN tipos_ingreso
-            ON ingresos.tipo_ingreso_id = tipos_ingreso.id
-            WHERE ingresos.mes = ?
-            ORDER BY tipos_ingreso.nombre
-        """, (mes_actual,)).fetchall()
-
     conn.close()
 
     return render_template(
         "ingresos_mensuales.html",
         ingresos=ingresos,
         tipos=tipos,
-        mes_actual=mes_actual
+        mes_actual=mes_actual,
+        available_meses=available_meses,
+        fecha_inicio=fecha_inicio
     )
 
 
@@ -483,7 +465,14 @@ def gastos():
     conn = get_connection()
     cur = conn.cursor()
 
-    mes_actual = format_mes_label(datetime.now())
+    requested_mes = request.args.get("mes")
+    default_mes = format_mes_label(datetime.now())
+    mes_actual = requested_mes or default_mes
+    if not parse_mes_label(mes_actual):
+        mes_actual = default_mes
+
+    available_meses = build_available_meses(cur, default_mes, mes_actual)
+    fecha_inicio = parse_mes_label(mes_actual).strftime("%Y-%m-%d")
 
     gastos = cur.execute("""
         SELECT *
@@ -500,6 +489,8 @@ def gastos():
         "gastos.html",
         gastos=gastos,
         mes_actual=mes_actual,
+        available_meses=available_meses,
+        fecha_inicio=fecha_inicio,
         total_gastos=total_gastos
     )
 
@@ -533,6 +524,57 @@ def actualizar_maestra():
     conn.close()
 
     return redirect("/ingresos_mensuales")
+
+
+@app.route("/actualizar_gasto", methods=["POST"])
+def actualizar_gasto():
+
+    gasto_id = request.form["gasto_id"]
+    concepto = request.form["concepto"]
+    valor = float(request.form["valor"])
+    fecha = request.form["fecha"]
+    fecha_obj = datetime.strptime(fecha, "%Y-%m-%d")
+    mes = format_mes_label(fecha_obj)
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        UPDATE gastos
+        SET concepto = ?,
+            valor = ?,
+            fecha = ?,
+            mes = ?
+        WHERE id = ?
+    """, (
+        concepto,
+        valor,
+        fecha,
+        mes,
+        gasto_id
+    ))
+
+    conn.commit()
+    conn.close()
+
+    return redirect(f"/gastos?mes={quote(mes)}")
+
+
+@app.route("/borrar_gasto", methods=["POST"])
+def borrar_gasto():
+
+    gasto_id = request.form["gasto_id"]
+    mes = get_redirect_mes()
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute("DELETE FROM gastos WHERE id = ?", (gasto_id,))
+
+    conn.commit()
+    conn.close()
+
+    return redirect(f"/gastos?mes={quote(mes)}")
 
 
 # ==================================================
@@ -590,7 +632,7 @@ def guardar_gasto():
     conn.commit()
     conn.close()
 
-    return redirect("/gastos")
+    return redirect(f"/gastos?mes={quote(mes)}")
 
 
 # ==================================================
@@ -605,6 +647,7 @@ def actualizar_ingreso_mensual():
     valor_manual = float(request.form.get("valor_manual", 0) or 0)
     valor_unitario = float(request.form.get("valor_unitario", 0) or 0)
     cantidad = int(request.form.get("cantidad", 1) or 1)
+    fecha = request.form["fecha"]
 
     if tipo_calculo == "salario":
         valor_unitario = valor_manual
@@ -615,8 +658,8 @@ def actualizar_ingreso_mensual():
         valor_unitario = valor_manual
         total = valor_manual
 
-    mes_actual = format_mes_label(datetime.now())
-    fecha_inicio = datetime.now().replace(day=1).strftime("%Y-%m-%d")
+    fecha_obj = datetime.strptime(fecha, "%Y-%m-%d")
+    mes = format_mes_label(fecha_obj)
 
     conn = get_connection()
     cur = conn.cursor()
@@ -635,15 +678,32 @@ def actualizar_ingreso_mensual():
         valor_unitario,
         cantidad,
         total,
-        fecha_inicio,
-        mes_actual,
+        fecha,
+        mes,
         ingreso_id
     ))
 
     conn.commit()
     conn.close()
 
-    return redirect("/ingresos_mensuales")
+    return redirect_ingresos_mensuales(mes)
+
+
+@app.route("/borrar_ingreso", methods=["POST"])
+def borrar_ingreso():
+
+    ingreso_id = request.form["ingreso_id"]
+    mes = get_redirect_mes()
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute("DELETE FROM ingresos WHERE id = ?", (ingreso_id,))
+
+    conn.commit()
+    conn.close()
+
+    return redirect_ingresos_mensuales(mes)
 
 
 # ==================================================
@@ -860,13 +920,6 @@ def format_fecha_filtro(value):
 app.jinja_env.filters['fecha_corta'] = format_fecha_filtro
 app.jinja_env.filters['pesos'] = format_pesos_colombianos
 app.jinja_env.filters['pesos_decimal'] = format_pesos_colombianos_decimal
-
-
-# ==================================================
-# INIT DB
-# ==================================================
-
-init_db()
 
 
 # ==================================================

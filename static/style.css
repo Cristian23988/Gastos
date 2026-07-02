@@ -357,6 +357,26 @@ button:active{
     transform:translateY(0);
 }
 
+.danger-button{
+    background:linear-gradient(135deg, #ff4f6d 0%, #b42345 100%);
+}
+
+.danger-button:hover{
+    box-shadow:0 8px 24px rgba(255, 79, 109, 0.28);
+}
+
+.actions-cell{
+    vertical-align:top;
+}
+
+.actions-cell form{
+    gap:0;
+}
+
+.actions-cell form + form{
+    margin-top:10px;
+}
+
 
 /* ===================================== */
 /* TABLE */
@@ -905,6 +925,97 @@ table tr:hover{
 
     table.table-6col-inputs td:nth-child(6)::before{
         content:"Acción";
+        display:block;
+        color:#7a8ba8;
+        font-size:11px;
+        font-weight:600;
+        letter-spacing:0.5px;
+        margin-bottom:6px;
+        text-transform:uppercase;
+    }
+
+    table.table-4col-inputs td:nth-child(1)::before,
+    table.table-7col-inputs td:nth-child(1)::before{
+        content:"Fecha";
+        display:block;
+        color:#7a8ba8;
+        font-size:11px;
+        font-weight:600;
+        letter-spacing:0.5px;
+        margin-bottom:6px;
+        text-transform:uppercase;
+    }
+
+    table.table-4col-inputs td:nth-child(2)::before,
+    table.table-7col-inputs td:nth-child(3)::before{
+        content:"Concepto";
+        display:block;
+        color:#7a8ba8;
+        font-size:11px;
+        font-weight:600;
+        letter-spacing:0.5px;
+        margin-bottom:6px;
+        text-transform:uppercase;
+    }
+
+    table.table-4col-inputs td:nth-child(3)::before{
+        content:"Valor";
+        display:block;
+        color:#7a8ba8;
+        font-size:11px;
+        font-weight:600;
+        letter-spacing:0.5px;
+        margin-bottom:6px;
+        text-transform:uppercase;
+    }
+
+    table.table-4col-inputs td:nth-child(4)::before,
+    table.table-7col-inputs td:nth-child(7)::before{
+        content:"Accion";
+        display:block;
+        color:#7a8ba8;
+        font-size:11px;
+        font-weight:600;
+        letter-spacing:0.5px;
+        margin-bottom:6px;
+        text-transform:uppercase;
+    }
+
+    table.table-7col-inputs td:nth-child(2)::before{
+        content:"Tipo";
+        display:block;
+        color:#7a8ba8;
+        font-size:11px;
+        font-weight:600;
+        letter-spacing:0.5px;
+        margin-bottom:6px;
+        text-transform:uppercase;
+    }
+
+    table.table-7col-inputs td:nth-child(4)::before{
+        content:"Valor Unitario";
+        display:block;
+        color:#7a8ba8;
+        font-size:11px;
+        font-weight:600;
+        letter-spacing:0.5px;
+        margin-bottom:6px;
+        text-transform:uppercase;
+    }
+
+    table.table-7col-inputs td:nth-child(5)::before{
+        content:"Cantidad";
+        display:block;
+        color:#7a8ba8;
+        font-size:11px;
+        font-weight:600;
+        letter-spacing:0.5px;
+        margin-bottom:6px;
+        text-transform:uppercase;
+    }
+
+    table.table-7col-inputs td:nth-child(6)::before{
+        content:"Total";
         display:block;
         color:#7a8ba8;
         font-size:11px;

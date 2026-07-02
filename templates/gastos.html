@@ -12,38 +12,75 @@
         <a href="/">Dashboard</a>
         <a href="/ingresos_mensuales">Ingresos Mensuales</a>
         <a href="/gastos">Gastos</a>
-        <a href="/analisis">Análisis</a>
+        <a href="/analisis">Analisis</a>
     </div>
 
     <h1>GASTOS DEL MES</h1>
     <h2>{{ mes_actual }}</h2>
 
     <div class="box">
+        <form method="GET" action="/gastos">
+            <label class="month-filter">
+                <span>Ver mes:</span>
+                <select name="mes" onchange="this.form.submit()">
+                    {% for mes in available_meses %}
+                    <option value="{{ mes }}" {% if mes == mes_actual %}selected{% endif %}>
+                        {{ mes }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </label>
+        </form>
+    </div>
+
+    <div class="box">
         <h3>Registrar gasto</h3>
         <form method="POST" action="/guardar_gasto">
             <input type="text" name="concepto" placeholder="Concepto del gasto" required>
             <input type="number" step="0.01" name="valor" placeholder="Valor del gasto" required>
-            <input type="date" name="fecha" required>
+            <input type="date" name="fecha" value="{{ fecha_inicio }}" required>
             <button type="submit">Guardar Gasto</button>
         </form>
     </div>
 
     <div class="box">
         <h3>Gastos registrados</h3>
-        <table class="table-3col">
+        <table class="table-4col-inputs">
             <thead>
                 <tr>
                     <th>Fecha</th>
                     <th>Concepto</th>
                     <th>Valor</th>
+                    <th>Accion</th>
                 </tr>
             </thead>
             <tbody>
                 {% for gasto in gastos %}
                 <tr>
-                    <td>{{ gasto.fecha|fecha_corta }}</td>
-                    <td>{{ gasto.concepto }}</td>
-                    <td>{{ gasto.valor|pesos }}</td>
+                    <td>
+                        <input form="editar-gasto-{{ gasto.id }}" type="date" name="fecha" value="{{ gasto.fecha }}" required>
+                    </td>
+                    <td>
+                        <input form="editar-gasto-{{ gasto.id }}" type="text" name="concepto" value="{{ gasto.concepto }}" required>
+                    </td>
+                    <td>
+                        <input form="editar-gasto-{{ gasto.id }}" type="number" step="0.01" name="valor" value="{{ gasto.valor }}" required>
+                    </td>
+                    <td class="actions-cell">
+                        <form id="editar-gasto-{{ gasto.id }}" method="POST" action="/actualizar_gasto">
+                            <input type="hidden" name="gasto_id" value="{{ gasto.id }}">
+                            <button type="submit">Guardar</button>
+                        </form>
+                        <form method="POST" action="/borrar_gasto" onsubmit="return confirm('Borrar este gasto?');">
+                            <input type="hidden" name="gasto_id" value="{{ gasto.id }}">
+                            <input type="hidden" name="redirect_mes" value="{{ mes_actual }}">
+                            <button type="submit" class="danger-button">Borrar</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4">No hay gastos registrados para este mes.</td>
                 </tr>
                 {% endfor %}
             </tbody>
