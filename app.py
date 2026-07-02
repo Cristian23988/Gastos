@@ -8,6 +8,10 @@ app = Flask(__name__)
 
 DB = "gastos.db"
 
+SALARIO_MINIMO_2026 = 1750905
+AUXILIO_TRANSPORTE_2026 = 249095
+TOPE_AUXILIO_TRANSPORTE = SALARIO_MINIMO_2026 * 2
+
 
 # ==================================================
 # CONEXIÓN DB
@@ -45,7 +49,15 @@ def init_db():
 
         tipo_calculo TEXT NOT NULL,
 
-        valor_unitario REAL DEFAULT 0
+        valor_unitario REAL DEFAULT 0,
+
+        porcentaje_deduccion REAL DEFAULT 8,
+
+        deduccion_sobre_auxilio INTEGER DEFAULT 0,
+
+        auxilio_transporte_valor REAL DEFAULT 249095,
+
+        recibe_auxilio_transporte INTEGER DEFAULT 0
     )
     """)
 
@@ -63,6 +75,8 @@ def init_db():
         concepto_otro TEXT,
 
         valor_unitario REAL,
+
+        auxilio_transporte REAL DEFAULT 0,
 
         cantidad INTEGER,
 
@@ -99,6 +113,19 @@ def init_db():
     existing_columns = [row[1] for row in cur.execute("PRAGMA table_info(ingresos)")]
     if "mes" not in existing_columns:
         cur.execute("ALTER TABLE ingresos ADD COLUMN mes TEXT")
+    if "auxilio_transporte" not in existing_columns:
+        cur.execute("ALTER TABLE ingresos ADD COLUMN auxilio_transporte REAL DEFAULT 0")
+
+    tipo_columns = [row[1] for row in cur.execute("PRAGMA table_info(tipos_ingreso)")]
+    if "porcentaje_deduccion" not in tipo_columns:
+        cur.execute("ALTER TABLE tipos_ingreso ADD COLUMN porcentaje_deduccion REAL DEFAULT 8")
+    if "deduccion_sobre_auxilio" not in tipo_columns:
+        cur.execute("ALTER TABLE tipos_ingreso ADD COLUMN deduccion_sobre_auxilio INTEGER DEFAULT 0")
+    if "auxilio_transporte_valor" not in tipo_columns:
+        cur.execute(f"ALTER TABLE tipos_ingreso ADD COLUMN auxilio_transporte_valor REAL DEFAULT {AUXILIO_TRANSPORTE_2026}")
+    added_recibe_auxilio = "recibe_auxilio_transporte" not in tipo_columns
+    if added_recibe_auxilio:
+        cur.execute("ALTER TABLE tipos_ingreso ADD COLUMN recibe_auxilio_transporte INTEGER DEFAULT 0")
 
     rows = cur.execute("SELECT id, fecha FROM ingresos WHERE mes IS NULL OR mes = ''").fetchall()
     for row in rows:
@@ -129,13 +156,13 @@ def init_db():
 
     tipos = [
 
-        ("SALARIO CRIS", 1, "salario", 0),
+        ("SALARIO CRIS", 1, "salario", 0, 8, 0, AUXILIO_TRANSPORTE_2026, 0),
 
-        ("SALARIO ELI", 1, "salario", 0),
+        ("SALARIO ELI", 1, "salario", 0, 8, 0, AUXILIO_TRANSPORTE_2026, 1),
 
-        ("TOQUES", 0, "toques", 350000),
+        ("TOQUES", 0, "toques", 350000, 0, 0, AUXILIO_TRANSPORTE_2026, 0),
 
-        ("OTRO INGRESO", 0, "otro", 0)
+        ("OTRO INGRESO", 0, "otro", 0, 0, 0, AUXILIO_TRANSPORTE_2026, 0)
     ]
 
     for tipo in tipos:
@@ -146,10 +173,41 @@ def init_db():
             nombre,
             aplica_deduccion,
             tipo_calculo,
-            valor_unitario
+            valor_unitario,
+            porcentaje_deduccion,
+            deduccion_sobre_auxilio,
+            auxilio_transporte_valor,
+            recibe_auxilio_transporte
         )
-        VALUES (?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, tipo)
+
+    cur.execute("""
+        UPDATE tipos_ingreso
+        SET porcentaje_deduccion = COALESCE(porcentaje_deduccion, 8),
+            deduccion_sobre_auxilio = COALESCE(deduccion_sobre_auxilio, 0),
+            auxilio_transporte_valor = COALESCE(auxilio_transporte_valor, ?),
+            recibe_auxilio_transporte = COALESCE(recibe_auxilio_transporte, 0)
+        WHERE tipo_calculo = 'salario'
+    """, (AUXILIO_TRANSPORTE_2026,))
+
+    cur.execute("""
+        UPDATE tipos_ingreso
+        SET porcentaje_deduccion = COALESCE(porcentaje_deduccion, 0),
+            deduccion_sobre_auxilio = 0,
+            auxilio_transporte_valor = COALESCE(auxilio_transporte_valor, ?),
+            recibe_auxilio_transporte = 0
+        WHERE tipo_calculo != 'salario'
+    """, (AUXILIO_TRANSPORTE_2026,))
+
+    if added_recibe_auxilio:
+        cur.execute("""
+            UPDATE tipos_ingreso
+            SET recibe_auxilio_transporte = 1
+            WHERE nombre = 'SALARIO ELI'
+        """)
+
+    recalcular_ingresos_salario(cur)
 
     conn.commit()
     conn.close()
@@ -245,6 +303,86 @@ def format_pesos_colombianos(valor):
 
 def format_pesos_colombianos_decimal(valor):
     return f"${valor:,.2f}".replace(",", ".")
+
+
+def get_float_form(name, default=0):
+    return float(request.form.get(name, default) or default)
+
+
+def get_int_form(name, default=1):
+    return int(request.form.get(name, default) or default)
+
+
+def tipo_recibe_auxilio_transporte(tipo):
+    return (
+        "recibe_auxilio_transporte" in tipo.keys()
+        and tipo["recibe_auxilio_transporte"]
+    )
+
+
+def calcular_auxilio_transporte(tipo, salario_base):
+    if not tipo_recibe_auxilio_transporte(tipo):
+        return 0
+    if salario_base > TOPE_AUXILIO_TRANSPORTE:
+        return 0
+    if "auxilio_transporte_valor" in tipo.keys():
+        return tipo["auxilio_transporte_valor"] or 0
+    return AUXILIO_TRANSPORTE_2026
+
+
+def calcular_total_salario(tipo, salario_base):
+    porcentaje = tipo["porcentaje_deduccion"] if "porcentaje_deduccion" in tipo.keys() else 8
+    porcentaje = porcentaje or 0
+    auxilio_transporte = calcular_auxilio_transporte(tipo, salario_base)
+    base_deduccion = salario_base
+    if "deduccion_sobre_auxilio" in tipo.keys() and tipo["deduccion_sobre_auxilio"]:
+        base_deduccion += auxilio_transporte
+    descuento = base_deduccion * (porcentaje / 100)
+    return salario_base + auxilio_transporte - descuento
+
+
+def calcular_salario_quincenal(tipo, salario_base):
+    return calcular_total_salario(tipo, salario_base) / 2
+
+
+def completar_ingreso_calculado(ingreso):
+    ingreso_dict = dict(ingreso)
+    if ingreso_dict["tipo_calculo"] == "salario":
+        ingreso_dict["salario_quincenal"] = ingreso_dict["total"] / 2
+    else:
+        ingreso_dict["salario_quincenal"] = None
+    return ingreso_dict
+
+
+def recalcular_ingresos_salario(cur, tipo_id=None):
+    params = []
+    filtro_tipo = ""
+    if tipo_id:
+        filtro_tipo = " AND tipos_ingreso.id = ?"
+        params.append(tipo_id)
+
+    salarios_guardados = cur.execute(f"""
+        SELECT
+            ingresos.id,
+            ingresos.valor_unitario AS salario_base,
+            tipos_ingreso.*
+        FROM ingresos
+        INNER JOIN tipos_ingreso
+        ON ingresos.tipo_ingreso_id = tipos_ingreso.id
+        WHERE tipos_ingreso.tipo_calculo = 'salario'
+        {filtro_tipo}
+    """, params).fetchall()
+
+    for salario in salarios_guardados:
+        salario_base = salario["salario_base"] or 0
+        auxilio_transporte = calcular_auxilio_transporte(salario, salario_base)
+        total = calcular_total_salario(salario, salario_base)
+        cur.execute("""
+            UPDATE ingresos
+            SET auxilio_transporte = ?,
+                total = ?
+            WHERE id = ?
+        """, (auxilio_transporte, total, salario["id"]))
 
 
 def get_previous_month_label(mes_label):
@@ -410,8 +548,20 @@ def index():
 # ==================================================
 
 @app.route("/maestras")
-def maestras_redirect():
-    return redirect("/ingresos_mensuales")
+def maestras():
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    tipos = cur.execute("""
+        SELECT *
+        FROM tipos_ingreso
+        ORDER BY nombre
+    """).fetchall()
+
+    conn.close()
+
+    return render_template("maestras.html", tipos=tipos)
 
 
 @app.route("/ingresos_mensuales")
@@ -446,6 +596,7 @@ def ingresos_mensuales():
         WHERE ingresos.mes = ?
         ORDER BY tipos_ingreso.nombre
     """, (mes_actual,)).fetchall()
+    ingresos = [completar_ingreso_calculado(ingreso) for ingreso in ingresos]
 
     conn.close()
 
@@ -507,23 +658,41 @@ def actualizar_maestra():
     valor_unitario = float(
         request.form["valor_unitario"] or 0
     )
+    porcentaje_deduccion = float(
+        request.form.get("porcentaje_deduccion", 0) or 0
+    )
+    deduccion_sobre_auxilio = 1 if request.form.get("deduccion_sobre_auxilio") else 0
+    auxilio_transporte_valor = float(
+        request.form.get("auxilio_transporte_valor", AUXILIO_TRANSPORTE_2026) or 0
+    )
+    recibe_auxilio_transporte = 1 if request.form.get("recibe_auxilio_transporte") else 0
 
     conn = get_connection()
     cur = conn.cursor()
 
     cur.execute("""
         UPDATE tipos_ingreso
-        SET valor_unitario = ?
+        SET valor_unitario = ?,
+            porcentaje_deduccion = ?,
+            deduccion_sobre_auxilio = ?,
+            auxilio_transporte_valor = ?,
+            recibe_auxilio_transporte = ?
         WHERE id = ?
     """, (
         valor_unitario,
+        porcentaje_deduccion,
+        deduccion_sobre_auxilio,
+        auxilio_transporte_valor,
+        recibe_auxilio_transporte,
         tipo_id
     ))
+
+    recalcular_ingresos_salario(cur, tipo_id)
 
     conn.commit()
     conn.close()
 
-    return redirect("/ingresos_mensuales")
+    return redirect("/maestras")
 
 
 @app.route("/actualizar_gasto", methods=["POST"])
@@ -644,30 +813,42 @@ def actualizar_ingreso_mensual():
     ingreso_id = request.form["ingreso_id"]
     tipo_calculo = request.form["tipo_calculo"]
     concepto_otro = request.form.get("concepto_otro", "")
-    valor_manual = float(request.form.get("valor_manual", 0) or 0)
-    valor_unitario = float(request.form.get("valor_unitario", 0) or 0)
-    cantidad = int(request.form.get("cantidad", 1) or 1)
+    valor_manual = get_float_form("valor_manual")
+    valor_unitario = get_float_form("valor_unitario")
+    cantidad = get_int_form("cantidad")
     fecha = request.form["fecha"]
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    tipo = cur.execute("""
+        SELECT tipos_ingreso.*
+        FROM ingresos
+        INNER JOIN tipos_ingreso
+        ON ingresos.tipo_ingreso_id = tipos_ingreso.id
+        WHERE ingresos.id = ?
+    """, (ingreso_id,)).fetchone()
 
     if tipo_calculo == "salario":
         valor_unitario = valor_manual
-        total = valor_manual * 0.92
+        auxilio_transporte = calcular_auxilio_transporte(tipo, valor_manual)
+        total = calcular_total_salario(tipo, valor_manual)
     elif tipo_calculo == "toques":
+        auxilio_transporte = 0
         total = valor_unitario * cantidad
     else:
+        auxilio_transporte = 0
         valor_unitario = valor_manual
         total = valor_manual
 
     fecha_obj = datetime.strptime(fecha, "%Y-%m-%d")
     mes = format_mes_label(fecha_obj)
 
-    conn = get_connection()
-    cur = conn.cursor()
-
     cur.execute("""
         UPDATE ingresos
         SET concepto_otro = ?,
             valor_unitario = ?,
+            auxilio_transporte = ?,
             cantidad = ?,
             total = ?,
             fecha = ?,
@@ -676,6 +857,7 @@ def actualizar_ingreso_mensual():
     """, (
         concepto_otro,
         valor_unitario,
+        auxilio_transporte,
         cantidad,
         total,
         fecha,
@@ -760,13 +942,17 @@ def guardar_ingreso():
 
         valor_unitario = valor_manual
 
-        total = valor_manual * 0.92
+        auxilio_transporte = calcular_auxilio_transporte(tipo, valor_manual)
+
+        total = calcular_total_salario(tipo, valor_manual)
 
     # ==================================================
     # TOQUES
     # ==================================================
 
     elif tipo["tipo_calculo"] == "toques":
+
+        auxilio_transporte = 0
 
         valor_unitario = tipo["valor_unitario"]
 
@@ -777,6 +963,8 @@ def guardar_ingreso():
     # ==================================================
 
     elif tipo["tipo_calculo"] == "otro":
+
+        auxilio_transporte = 0
 
         valor_unitario = valor_manual
 
@@ -795,6 +983,8 @@ def guardar_ingreso():
 
             valor_unitario,
 
+            auxilio_transporte,
+
             cantidad,
 
             total,
@@ -804,7 +994,7 @@ def guardar_ingreso():
             mes
 
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 
     """, (
 
@@ -813,6 +1003,8 @@ def guardar_ingreso():
         concepto_otro,
 
         valor_unitario,
+
+        auxilio_transporte,
 
         cantidad,
 
@@ -826,7 +1018,7 @@ def guardar_ingreso():
     conn.commit()
     conn.close()
 
-    return redirect("/ingresos_mensuales")
+    return redirect_ingresos_mensuales(mes)
 
 
 # ==================================================

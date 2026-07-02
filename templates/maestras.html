@@ -2,15 +2,10 @@
 <html lang="es">
 
 <head>
-
     <meta charset="UTF-8">
-
-    <title>Configuración</title>
-
-    <link rel="stylesheet"
-          href="{{ url_for('static',
-          filename='style.css') }}">
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuracion</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 
 <body>
@@ -18,81 +13,109 @@
 <div class="container">
 
     <div class="topbar">
-
         <a href="/">Dashboard</a>
-
-        <a href="/maestras">
-            Configuración
-        </a>
-
+        <a href="/ingresos_mensuales">Ingresos Mensuales</a>
+        <a href="/gastos">Gastos</a>
+        <a href="/analisis">Analisis</a>
+        <a href="/maestras">Maestras</a>
     </div>
 
     <h1>MAESTRAS</h1>
 
     <div class="box">
-
-        <table class="table-3col-action">
-
+        <table class="table-6col-action">
             <thead>
-
                 <tr>
                     <th>Tipo</th>
                     <th>Valor Unitario</th>
-                    <th>Acción</th>
+                    <th>% Descuento</th>
+                    <th>Base descuento</th>
+                    <th>Auxilio transporte</th>
+                    <th>Accion</th>
                 </tr>
-
             </thead>
 
             <tbody>
-
                 {% for tipo in tipos %}
-
                 <tr>
+                    <td>{{ tipo.nombre }}</td>
 
-                    <form method="POST"
-                          action="/actualizar_maestra">
+                    <td>
+                        <input
+                            form="editar-maestra-{{ tipo.id }}"
+                            type="number"
+                            step="0.01"
+                            name="valor_unitario"
+                            value="{{ tipo.valor_unitario }}">
 
-                        <td>
+                        <input
+                            form="editar-maestra-{{ tipo.id }}"
+                            type="hidden"
+                            name="tipo_id"
+                            value="{{ tipo.id }}">
+                    </td>
 
-                            {{ tipo.nombre }}
+                    <td>
+                        <input
+                            form="editar-maestra-{{ tipo.id }}"
+                            type="number"
+                            step="0.01"
+                            name="porcentaje_deduccion"
+                            value="{{ tipo.porcentaje_deduccion }}">
+                    </td>
 
-                        </td>
-
-                        <td>
-
+                    <td>
+                        {% if tipo.tipo_calculo == 'salario' %}
+                        <label class="checkbox-label">
                             <input
-                                type="number"
-                                step="0.01"
-                                name="valor_unitario"
-                                value="{{ tipo.valor_unitario }}">
+                                form="editar-maestra-{{ tipo.id }}"
+                                type="checkbox"
+                                name="deduccion_sobre_auxilio"
+                                value="1"
+                                {% if tipo.deduccion_sobre_auxilio %}checked{% endif %}>
+                            Base + auxilio
+                        </label>
+                        {% else %}
+                        <span class="muted-text">No aplica</span>
+                        {% endif %}
+                    </td>
 
+                    <td>
+                        {% if tipo.tipo_calculo == 'salario' %}
+                        <label class="checkbox-label">
                             <input
-                                type="hidden"
-                                name="tipo_id"
-                                value="{{ tipo.id }}">
+                                form="editar-maestra-{{ tipo.id }}"
+                                type="checkbox"
+                                name="recibe_auxilio_transporte"
+                                value="1"
+                                {% if tipo.recibe_auxilio_transporte %}checked{% endif %}>
+                            Usa auxilio
+                        </label>
+                        <input
+                            form="editar-maestra-{{ tipo.id }}"
+                            type="number"
+                            step="0.01"
+                            name="auxilio_transporte_valor"
+                            value="{{ tipo.auxilio_transporte_valor }}">
+                        {% else %}
+                        <span class="muted-text">No aplica</span>
+                        <input
+                            form="editar-maestra-{{ tipo.id }}"
+                            type="hidden"
+                            name="auxilio_transporte_valor"
+                            value="{{ tipo.auxilio_transporte_valor }}">
+                        {% endif %}
+                    </td>
 
-                        </td>
-
-                        <td>
-
-                            <button type="submit">
-
-                                Guardar
-
-                            </button>
-
-                        </td>
-
-                    </form>
-
+                    <td>
+                        <form id="editar-maestra-{{ tipo.id }}" method="POST" action="/actualizar_maestra">
+                            <button type="submit">Guardar</button>
+                        </form>
+                    </td>
                 </tr>
-
                 {% endfor %}
-
             </tbody>
-
         </table>
-
     </div>
 
 </div>

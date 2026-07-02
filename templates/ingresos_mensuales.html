@@ -13,6 +13,7 @@
         <a href="/ingresos_mensuales">Ingresos Mensuales</a>
         <a href="/gastos">Gastos</a>
         <a href="/analisis">Analisis</a>
+        <a href="/maestras">Maestras</a>
     </div>
 
     <h1>INGRESOS MENSUALES</h1>
@@ -54,7 +55,7 @@
                     {% endfor %}
                 </select>
 
-                <input type="number" step="0.01" name="valor_manual" placeholder="Valor del ingreso" required>
+                <input type="number" step="0.01" name="valor_manual" placeholder="Salario base mensual o valor del ingreso" required>
                 <input type="number" name="cantidad" placeholder="Cantidad (solo para toques)">
                 <input type="text" name="concepto_otro" placeholder="Concepto (solo para otro)">
                 <input type="date" name="fecha" value="{{ fecha_inicio }}" required>
@@ -64,13 +65,15 @@
     </div>
 
     <div class="box">
-        <table class="table-7col-inputs">
+        <table class="table-9col-inputs">
             <thead>
                 <tr>
                     <th>Fecha</th>
                     <th>Tipo</th>
                     <th>Concepto</th>
-                    <th>Valor Unitario</th>
+                    <th>Salario base</th>
+                    <th>Auxilio calculado</th>
+                    <th>Quincena libre</th>
                     <th>Cantidad</th>
                     <th>Total</th>
                     <th>Accion</th>
@@ -98,6 +101,20 @@
                         {% endif %}
                     </td>
                     <td>
+                        {% if ingreso.tipo_calculo == 'salario' %}
+                            {{ ingreso.auxilio_transporte|pesos }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if ingreso.tipo_calculo == 'salario' %}
+                            <input type="text" value="{{ ingreso.salario_quincenal|pesos }}" readonly>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>
                         {% if ingreso.tipo_calculo == 'toques' %}
                             <input form="editar-ingreso-{{ ingreso.id }}" type="number" name="cantidad" value="{{ ingreso.cantidad }}">
                         {% else %}
@@ -121,7 +138,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="7">No hay ingresos registrados para este mes.</td>
+                    <td colspan="9">No hay ingresos registrados para este mes.</td>
                 </tr>
                 {% endfor %}
             </tbody>
