@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Gastos - Análisis</title>
+    <link rel="stylesheet" href="static/style.css">
+    <!-- Cargar Chart.js y sql.js desde CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+    <script src="db.js"></script>
+</head>
+<body>
+<div class="container">
+    <div class="topbar">
+        <a href="index.html">Dashboard</a>
+        <a href="ingresos_mensuales.html">Ingresos Mensuales</a>
+        <a href="gastos.html">Gastos</a>
+        <a href="analisis.html" class="active">Análisis</a>
+        <a href="maestras.html">Maestras</a>
+    </div>
+
+    <h1 style="margin-top: 20px;">ANÁLISIS COMPARATIVO</h1>
+    <h2>Estadísticas de Gastos e Ingresos</h2>
+
+    <!-- SELECTOR DE MESES -->
+    <div class="box">
+        <h3>Selecciona meses a comparar</h3>
+        <form id="form_meses" onsubmit="actualizarAnalisis(event)">
+            <div class="mes-checkboxes" id="mes_checkboxes_container">
+                <!-- Checkboxes generados dinámicamente -->
+            </div>
+            <button type="submit">Actualizar Análisis</button>
+        </form>
+    </div>
+
+    <!-- GRÁFICAS -->
+    <div id="analytics_content" style="display:none;">
+        <div class="box full-width">
+            <h3>Comparativa de Ingresos, Gastos y Balance</h3>
+            <div class="chart-container">
+                <canvas id="chartComparativa"></canvas>
+            </div>
+        </div>
+
+        <div class="analytics-grid">
+            <div class="box">
+                <h3>Ingresos por Mes</h3>
+                <div class="chart-container">
+                    <canvas id="chartIngresos"></canvas>
+                </div>
+            </div>
+
+            <div class="box">
+                <h3>Gastos por Mes</h3>
+                <div class="chart-container">
+                    <canvas id="chartGastos"></canvas>
+                </div>
+            </div>
+
+            <div class="box">
+                <h3>Balance por Mes</h3>
+                <div class="chart-container">
+                    <canvas id="chartBalance"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- TABLA RESUMEN -->
+        <div class="box">
+            <h3>Resumen Detallado</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Mes</th>
+                        <th>Ingresos</th>
+                        <th>Gastos</th>
+                        <th>Balance</th>
+                        <th>% Gasto</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla_resumen">
+                    <!-- Dinámico -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="box" id="no_data_message">
+        <p>No hay datos disponibles para los meses seleccionados.</p>
+    </div>
+</div>
+
+<script>
+    let activeCharts = {};
+
+    function getPadding() {
+        if (window.innerWidth < 900) {
+            return { top: 8, right: 8, bottom: 0, left: 15 };  // Mobile
+        }
+        return { top: 8, right: 8, bottom: 0, left: 70 };  // Desktop
+    }
+
+    async function loadAnalisis() {
+        const defaultMes = formatMesLabel(new Date());
+        const availableMonths = await buildAvailableMeses(defaultMes);
+
+        // Leer los meses seleccionados desde la URL
+        const urlParams = new URLSearchParams(window.location.search);
+        let mesesSeleccionados = urlParams.getAll("meses");
+
+        // Si no hay meses seleccionados, elegimos los últimos 4 por defecto
+        if (mesesSeleccionados.length === 0) {
+            mesesSeleccionados = availableMonths.slice(0, 4);
+        }
+
+        // Renderizar checkboxes
+        const container = document.getElementById("mes_checkboxes_container");
+        container.innerHTML = "";
+        availableMonths.forEach(m => {
+            const label = document.createElement("label");
+            label.className = "checkbox-label";
+            
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.name = "meses";
+            checkbox.value = m;
+            if (mesesSeleccionados.includes(m)) checkbox.checked = true;
+
+            label.appendChild(checkbox);
+            label.appendChild(document.createTextNode(" " + m));
+            container.appendChild(label);
+        });
+
+        if (mesesSeleccionados.length === 0) {
+            document.getElementById("analytics_content").style.display = "none";
+            document.getElementById("no_data_message").style.display = "block";
+            return;
+        }
+
+        // Obtener datos detallados para los meses seleccionados
+        // Se ordenan cronológicamente para los gráficos (más antiguos primero)
+        const mesesCronologicos = [...mesesSeleccionados].sort((a, b) => parseMesLabel(a) - parseMesLabel(b));
+
+        const datosMeses = await Promise.all(mesesCronologicos.map(async mes => {
+            const ingRow = await executeQuery("SELECT SUM(total) AS total FROM ingresos WHERE mes = ?", [mes]);
+            const gasRow = await executeQuery("SELECT SUM(valor) AS total FROM gastos WHERE mes = ?", [mes]);
+            const ingresos = ingRow[0].total || 0;
+            const gastos = gasRow[0].total || 0;
+            return {
+                mes,
+                ingresos,
+                gastos,
+                balance: ingresos - gastos
+            };
+        }));
+
+        const totalDatosValidos = datosMeses.reduce((sum, d) => sum + d.ingresos + d.gastos, 0);
+
+        if (totalDatosValidos === 0) {
+            document.getElementById("analytics_content").style.display = "none";
+            document.getElementById("no_data_message").style.display = "block";
+            return;
+        }
+
+        document.getElementById("analytics_content").style.display = "block";
+        document.getElementById("no_data_message").style.display = "none";
+
+        // Renderizar Tabla
+        const tbody = document.getElementById("tabla_resumen");
+        tbody.innerHTML = "";
+        
+        // Para la tabla, a veces es más cómodo verlos ordenados de más nuevos a más viejos
+        const datosTabla = [...datosMeses].reverse();
+        datosTabla.forEach(d => {
+            const porcentajeGasto = d.ingresos > 0 ? ((d.gastos / d.ingresos) * 100).toFixed(1) + '%' : 'N/A';
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td><strong>${d.mes}</strong></td>
+                <td style="color:#00e5ff;">${formatPesos(d.ingresos)}</td>
+                <td style="color:#ff4fd8;">${formatPesos(d.gastos)}</td>
+                <td style="font-weight:bold; color:#7b61ff;">${formatPesos(d.balance)}</td>
+                <td>${porcentajeGasto}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        // Configuración de Charts
+        const labels = datosMeses.map(d => d.mes);
+        const ingresosArr = datosMeses.map(d => d.ingresos);
+        const gastosArr = datosMeses.map(d => d.gastos);
+        const balancesArr = datosMeses.map(d => d.balance);
+
+        const colorIngresos = '#00e5ff';
+        const colorGastos = '#ff4fd8';
+        const colorBalance = '#7b61ff';
+        const colorFondo = 'rgba(123, 97, 255, 0.05)';
+
+        // Destruir gráficos anteriores para evitar fugas/bugs de renderizado
+        Object.keys(activeCharts).forEach(key => activeCharts[key].destroy());
+
+        const yAxisConfig = {
+            beginAtZero: true,
+            ticks: {
+                color: '#9fb0e0',
+                font: { size: 11 },
+                padding: 12,
+                maxTicksLimit: 6,
+                callback: function(value) {
+                    if (Math.abs(value) >= 1000000) {
+                        return '$' + (value / 1000000).toFixed(1) + 'M';
+                    } else if (Math.abs(value) >= 1000) {
+                        return '$' + (value / 1000).toFixed(0) + 'K';
+                    }
+                    return '$' + value;
+                }
+            },
+            grid: { color: 'rgba(255,255,255,0.05)' }
+        };
+
+        const xAxisConfig = {
+            ticks: {
+                color: '#9fb0e0',
+                font: { size: 12 },
+                padding: 12
+            },
+            grid: { color: 'rgba(255,255,255,0.05)' }
+        };
+
+        // Gráfica Comparativa (Barras)
+        const ctxComp = document.getElementById('chartComparativa').getContext('2d');
+        activeCharts.comparativa = new Chart(ctxComp, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'Ingresos', data: ingresosArr, backgroundColor: colorIngresos, borderWidth: 0 },
+                    { label: 'Gastos', data: gastosArr, backgroundColor: colorGastos, borderWidth: 0 },
+                    { label: 'Balance', data: balancesArr, backgroundColor: colorBalance, borderWidth: 0 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: { padding: getPadding() },
+                plugins: {
+                    legend: {
+                        display: true,
+                        labels: { color: '#d7ddf5', font: { size: 13 } }
+                    }
+                },
+                scales: { y: yAxisConfig, x: xAxisConfig }
+            }
+        });
+
+        // Gráfica Ingresos (Línea)
+        const ctxIng = document.getElementById('chartIngresos').getContext('2d');
+        activeCharts.ingresos = new Chart(ctxIng, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Ingresos',
+                    data: ingresosArr,
+                    borderColor: colorIngresos,
+                    backgroundColor: colorFondo,
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 6,
+                    pointBackgroundColor: colorIngresos,
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: { padding: getPadding() },
+                plugins: { legend: { display: false } },
+                scales: { y: yAxisConfig, x: xAxisConfig }
+            }
+        });
+
+        // Gráfica Gastos (Línea)
+        const ctxGas = document.getElementById('chartGastos').getContext('2d');
+        activeCharts.gastos = new Chart(ctxGas, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Gastos',
+                    data: gastosArr,
+                    borderColor: colorGastos,
+                    backgroundColor: colorFondo,
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 6,
+                    pointBackgroundColor: colorGastos,
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: { padding: getPadding() },
+                plugins: { legend: { display: false } },
+                scales: { y: yAxisConfig, x: xAxisConfig }
+            }
+        });
+
+        // Gráfica Balance (Línea)
+        const ctxBal = document.getElementById('chartBalance').getContext('2d');
+        activeCharts.balance = new Chart(ctxBal, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Balance',
+                    data: balancesArr,
+                    borderColor: colorBalance,
+                    backgroundColor: colorFondo,
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 6,
+                    pointBackgroundColor: colorBalance,
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: { padding: getPadding() },
+                plugins: { legend: { display: false } },
+                scales: { y: yAxisConfig, x: xAxisConfig }
+            }
+        });
+    }
+
+    function actualizarAnalisis(event) {
+        event.preventDefault();
+        const checkboxes = document.querySelectorAll('input[name="meses"]:checked');
+        const params = new URLSearchParams();
+        checkboxes.forEach(cb => params.append("meses", cb.value));
+        window.location.search = params.toString();
+    }
+
+    // Iniciar
+    window.addEventListener("DOMContentLoaded", async () => {
+        await initDatabase();
+        await loadAnalisis();
+    });
+</script>
+
+<style>
+    .mes-checkboxes {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+
+    .checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        color: #d7ddf5;
+        font-size: 14px;
+    }
+
+    .checkbox-label input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+        accent-color: #00e5ff;
+    }
+
+    .chart-container canvas {
+        max-width: 100%;
+    }
+
+    @media(max-width: 900px) {
+        .mes-checkboxes {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .box .chart-container {
+            max-height: 300px;
+            margin-left: 0;
+        }
+
+        .chart-container canvas {
+            max-width: 100% !important;
+            height: auto !important;
+        }
+    }
+
+    @media(max-width: 600px) {
+        .mes-checkboxes {
+            grid-template-columns: 1fr;
+        }
+
+        .box .chart-container {
+            max-height: 280px;
+            overflow: hidden;
+        }
+    }
+</style>
+</body>
+</html>

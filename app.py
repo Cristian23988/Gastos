@@ -6,7 +6,19 @@ from urllib.parse import quote
 
 app = Flask(__name__)
 
-DB = "gastos.db"
+DB_DEFAULT = "gastos.db"
+DB = os.environ.get("DATABASE_PATH", DB_DEFAULT)
+
+# Si estamos usando un disco persistente y la BD no existe allí todavía,
+# copiamos la base de datos local inicial para no perder los datos.
+if DB != DB_DEFAULT and not os.path.exists(DB):
+    import shutil
+    db_dir = os.path.dirname(DB)
+    if db_dir and not os.path.exists(db_dir):
+        os.makedirs(db_dir, exist_ok=True)
+    if os.path.exists(DB_DEFAULT):
+        shutil.copy2(DB_DEFAULT, DB)
+
 
 SALARIO_MINIMO_2026 = 1750905
 AUXILIO_TRANSPORTE_2026 = 249095

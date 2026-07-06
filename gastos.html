@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Gastos - Gastos</title>
+    <link rel="stylesheet" href="static/style.css">
+    <!-- Cargar sql.js desde CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+    <script src="db.js"></script>
+</head>
+<body>
+<div class="container">
+    <div class="topbar">
+        <a href="index.html">Dashboard</a>
+        <a href="ingresos_mensuales.html">Ingresos Mensuales</a>
+        <a href="gastos.html" class="active">Gastos</a>
+        <a href="analisis.html">Análisis</a>
+        <a href="maestras.html">Maestras</a>
+    </div>
+
+    <h1 style="margin-top: 20px;">GASTOS DEL MES</h1>
+    <h2 id="mes_titulo">Cargando...</h2>
+
+    <div class="box">
+        <label class="month-filter">
+            <span>Ver mes:</span>
+            <select id="select_mes" onchange="cambiarMes(this.value)">
+                <!-- Meses cargados dinámicamente -->
+            </select>
+        </label>
+    </div>
+
+    <div class="box">
+        <h3>Registrar gasto</h3>
+        <form id="form_registrar" onsubmit="guardarGasto(event)">
+            <input type="text" id="reg_concepto" placeholder="Concepto del gasto" required>
+            <input type="number" step="0.01" id="reg_valor" placeholder="Valor del gasto" required>
+            <input type="date" id="reg_fecha" required>
+            <button type="submit">Guardar Gasto</button>
+        </form>
+    </div>
+
+    <div class="box">
+        <h3>Gastos registrados</h3>
+        <table class="table-4col-inputs">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Concepto</th>
+                    <th>Valor</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody id="tabla_gastos">
+                <!-- Cargado dinámicamente -->
+            </tbody>
+        </table>
+    </div>
+
+    <div class="box">
+        <h3>Total Gastos</h3>
+        <p id="total_gastos">$0</p>
+    </div>
+</div>
+
+<script>
+    let mesActual;
+
+    async function loadGastos() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const defaultMes = formatMesLabel(new Date());
+        mesActual = urlParams.get("mes") || defaultMes;
+
+        // Cargar meses disponibles
+        const availableMonths = await buildAvailableMeses(defaultMes);
+        if (!availableMonths.includes(mesActual) && parseMesLabel(mesActual) === null) {
+            mesActual = defaultMes;
+        }
+
+        const selectMes = document.getElementById("select_mes");
+        selectMes.innerHTML = "";
+        availableMonths.forEach(m => {
+            const opt = document.createElement("option");
+            opt.value = m;
+            opt.textContent = m;
+            if (m === mesActual) opt.selected = true;
+            selectMes.appendChild(opt);
+        });
+
+        document.getElementById("mes_titulo").textContent = mesActual;
+
+        // Set fecha por defecto para el registro (hoy, formateado YYYY-MM-DD)
+        const hoyObj = new Date();
+        const yyyy = hoyObj.getFullYear();
+        const mm = String(hoyObj.getMonth() + 1).padStart(2, '0');
+        const dd = String(hoyObj.getDate()).padStart(2, '0');
+        document.getElementById("reg_fecha").value = `${yyyy}-${mm}-${dd}`;
+
+        // Obtener gastos del mes
+        const gastos = await executeQuery(`
+            SELECT * FROM gastos WHERE mes = ? ORDER BY fecha DESC
+        `, [mesActual]);
+
+        const tbody = document.getElementById("tabla_gastos");
+        tbody.innerHTML = "";
+
+        let sumGastos = 0;
+
+        if (gastos.length > 0) {
+            gastos.forEach(g => {
+                sumGastos += g.valor || 0;
+
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>
+                        <input type="date" id="fecha-${g.id}" value="${g.fecha}" required>
+                    </td>
+                    <td>
+                        <input type="text" id="concepto-${g.id}" value="${g.concepto}" required>
+                    </td>
+                    <td>
+                        <input type="number" step="0.01" id="valor-${g.id}" value="${g.valor}" required>
+                    </td>
+                    <td class="actions-cell">
+                        <button onclick="actualizarGasto(${g.id})">Guardar</button>
+                        <button onclick="borrarGasto(${g.id})" class="danger-button">Borrar</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } else {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="4" style="text-align: center;">No hay gastos registrados para este mes.</td>
+                </tr>
+            `;
+        }
+
+        document.getElementById("total_gastos").textContent = formatPesos(sumGastos);
+    }
+
+    async function guardarGasto(event) {
+        event.preventDefault();
+        const concepto = document.getElementById("reg_concepto").value;
+        const valor = parseFloat(document.getElementById("reg_valor").value);
+        const fecha = document.getElementById("reg_fecha").value;
+
+        // Calcular el mes basado en la fecha seleccionada
+        const dateObj = new Date(fecha + 'T00:00:00');
+        const mesLabel = formatMesLabel(dateObj);
+
+        try {
+            await executeRun(`
+                INSERT INTO gastos (concepto, valor, fecha, mes)
+                VALUES (?, ?, ?, ?)
+            `, [concepto, valor, fecha, mesLabel]);
+
+            alert("Gasto guardado con éxito.");
+            // Recargar la vista con el mes del gasto guardado
+            window.location.search = `?mes=${encodeURIComponent(mesLabel)}`;
+        } catch (e) {
+            alert("Error al guardar: " + e.message);
+        }
+    }
+
+    async function actualizarGasto(id) {
+        const concepto = document.getElementById(`concepto-${id}`).value;
+        const valor = parseFloat(document.getElementById(`valor-${id}`).value);
+        const fecha = document.getElementById(`fecha-${id}`).value;
+
+        const dateObj = new Date(fecha + 'T00:00:00');
+        const mesLabel = formatMesLabel(dateObj);
+
+        try {
+            await executeRun(`
+                UPDATE gastos
+                SET concepto = ?, valor = ?, fecha = ?, mes = ?
+                WHERE id = ?
+            `, [concepto, valor, fecha, mesLabel, id]);
+
+            alert("Gasto actualizado con éxito.");
+            window.location.reload();
+        } catch (e) {
+            alert("Error al actualizar: " + e.message);
+        }
+    }
+
+    async function borrarGasto(id) {
+        if (!confirm("¿Seguro que deseas borrar este gasto?")) return;
+        try {
+            await executeRun(`DELETE FROM gastos WHERE id = ?`, [id]);
+            alert("Gasto borrado con éxito.");
+            window.location.reload();
+        } catch (e) {
+            alert("Error al borrar: " + e.message);
+        }
+    }
+
+    function cambiarMes(nuevoMes) {
+        window.location.search = `?mes=${encodeURIComponent(nuevoMes)}`;
+    }
+
+    // Iniciar
+    window.addEventListener("DOMContentLoaded", async () => {
+        await initDatabase();
+        await loadGastos();
+    });
+</script>
+</body>
+</html>

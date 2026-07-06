@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Gastos - Maestras</title>
+    <link rel="stylesheet" href="static/style.css">
+    <!-- Cargar sql.js desde CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+    <script src="db.js"></script>
+</head>
+<body>
+<div class="container">
+    <div class="topbar">
+        <a href="index.html">Dashboard</a>
+        <a href="ingresos_mensuales.html">Ingresos Mensuales</a>
+        <a href="gastos.html">Gastos</a>
+        <a href="analisis.html">Análisis</a>
+        <a href="maestras.html" class="active">Maestras</a>
+    </div>
+
+    <h1 style="margin-top: 20px;">MAESTRAS</h1>
+
+    <div class="box">
+        <table class="table-6col-action">
+            <thead>
+                <tr>
+                    <th>Tipo</th>
+                    <th>Valor Unitario</th>
+                    <th>% Descuento</th>
+                    <th>Base descuento</th>
+                    <th>Auxilio transporte</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody id="tabla_maestras">
+                <!-- Carga dinámica -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    async function loadMaestras() {
+        const tipos = await executeQuery("SELECT * FROM tipos_ingreso ORDER BY nombre");
+        const tbody = document.getElementById("tabla_maestras");
+        tbody.innerHTML = "";
+
+        tipos.forEach(t => {
+            const tr = document.createElement("tr");
+
+            let baseDescuentoHtml = '<span class="muted-text">No aplica</span>';
+            let auxilioHtml = '<span class="muted-text">No aplica</span>';
+
+            if (t.tipo_calculo === 'salario') {
+                const checkedBase = t.deduccion_sobre_auxilio ? 'checked' : '';
+                baseDescuentoHtml = `
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="deduccion_sobre_auxilio-${t.id}" ${checkedBase}>
+                        Base + auxilio
+                    </label>
+                `;
+
+                const checkedAux = t.recibe_auxilio_transporte ? 'checked' : '';
+                auxilioHtml = `
+                    <label class="checkbox-label" style="margin-bottom: 5px; display:block;">
+                        <input type="checkbox" id="recibe_auxilio_transporte-${t.id}" ${checkedAux}>
+                        Usa auxilio
+                    </label>
+                    <input type="number" step="0.01" id="auxilio_transporte_valor-${t.id}" value="${t.auxilio_transporte_valor || 0}">
+                `;
+            } else {
+                // Input oculto para simplificar la lectura al guardar
+                auxilioHtml += `<input type="hidden" id="auxilio_transporte_valor-${t.id}" value="${t.auxilio_transporte_valor || 0}">`;
+            }
+
+            tr.innerHTML = `
+                <td><strong>${t.nombre}</strong></td>
+                <td>
+                    <input type="number" step="0.01" id="valor_unitario-${t.id}" value="${t.valor_unitario || 0}">
+                </td>
+                <td>
+                    <input type="number" step="0.01" id="porcentaje_deduccion-${t.id}" value="${t.porcentaje_deduccion || 0}">
+                </td>
+                <td>${baseDescuentoHtml}</td>
+                <td>${auxilioHtml}</td>
+                <td>
+                    <button onclick="guardarMaestra(${t.id}, '${t.tipo_calculo}')">Guardar</button>
+                </td>
+            `;
+
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function guardarMaestra(id, tipoCalculo) {
+        const valorUnitario = parseFloat(document.getElementById(`valor_unitario-${id}`).value) || 0;
+        const porcentajeDeduccion = parseFloat(document.getElementById(`porcentaje_deduccion-${id}`).value) || 0;
+
+        let deduccionSobreAuxilio = 0;
+        let recibeAuxilioTransporte = 0;
+        let auxilioTransporteValor = parseFloat(document.getElementById(`auxilio_transporte_valor-${id}`).value) || 0;
+
+        if (tipoCalculo === 'salario') {
+            deduccionSobreAuxilio = document.getElementById(`deduccion_sobre_auxilio-${id}`).checked ? 1 : 0;
+            recibeAuxilioTransporte = document.getElementById(`recibe_auxilio_transporte-${id}`).checked ? 1 : 0;
+        }
+
+        try {
+            await executeRun(`
+                UPDATE tipos_ingreso
+                SET valor_unitario = ?,
+                    porcentaje_deduccion = ?,
+                    deduccion_sobre_auxilio = ?,
+                    auxilio_transporte_valor = ?,
+                    recibe_auxilio_transporte = ?
+                WHERE id = ?
+            `, [valorUnitario, porcentajeDeduccion, deduccionSobreAuxilio, auxilioTransporteValor, recibeAuxilioTransporte, id]);
+
+            // Recalcular ingresos del tipo salario si corresponde
+            if (tipoCalculo === 'salario') {
+                await recalcularIngresosSalario(id);
+            }
+
+            alert("Maestra guardada con éxito y salarios recalculados.");
+            window.location.reload();
+        } catch (e) {
+            alert("Error al guardar: " + e.message);
+        }
+    }
+
+    // Iniciar
+    window.addEventListener("DOMContentLoaded", async () => {
+        await initDatabase();
+        await loadMaestras();
+    });
+</script>
+</body>
+</html>

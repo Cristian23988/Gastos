@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Gastos - Dashboard</title>
+    <link rel="stylesheet" href="static/style.css">
+    <!-- Cargar sql.js desde CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+    <script src="db.js"></script>
+</head>
+<body>
+<div class="container">
+    <div class="topbar">
+        <a href="index.html" class="active">Dashboard</a>
+        <a href="ingresos_mensuales.html">Ingresos Mensuales</a>
+        <a href="gastos.html">Gastos</a>
+        <a href="analisis.html">Análisis</a>
+        <a href="maestras.html">Maestras</a>
+    </div>
+
+    <h1 style="margin-top: 20px;">CONTROL DE GASTOS</h1>
+    <h2 id="mes_titulo">Cargando...</h2>
+
+    <div class="cards">
+        <div class="card">
+            <h3>INGRESOS</h3>
+            <p id="total_ingresos_card">$0</p>
+        </div>
+
+        <div class="card">
+            <h3>GASTOS</h3>
+            <p id="total_gastos_card">$0</p>
+        </div>
+
+        <div class="card">
+            <h3>BALANCE</h3>
+            <p id="balance_card">$0</p>
+        </div>
+    </div>
+
+    <div class="box">
+        <label class="month-filter">
+            <span>Ver mes:</span>
+            <select id="select_mes" onchange="cambiarMes(this.value)">
+                <!-- Meses cargados dinámicamente -->
+            </select>
+        </label>
+    </div>
+
+    <div class="box">
+        <h3 id="resumen_mes_titulo">Resumen de ...</h3>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <strong>Ingreso</strong>
+                <p id="stat_ingresos">$0</p>
+            </div>
+
+            <div class="stat-card">
+                <strong>Gasto</strong>
+                <p id="stat_gastos">$0</p>
+            </div>
+
+            <div class="stat-card">
+                <strong>Balance</strong>
+                <p id="stat_balance">$0</p>
+            </div>
+
+            <div class="stat-card">
+                <strong>Mes anterior</strong>
+                <p id="stat_mes_anterior">N/A</p>
+            </div>
+
+            <div class="stat-card">
+                <strong>Balance anterior</strong>
+                <p id="stat_balance_anterior">$0</p>
+            </div>
+
+            <div class="stat-card">
+                <strong>Comparación</strong>
+                <p id="stat_comparacion">Cargando...</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="box">
+        <h3>Gastos por día</h3>
+        <div id="chart_container">
+            <p>Cargando gráfico...</p>
+        </div>
+        <p class="chart-summary" id="chart_summary"></p>
+    </div>
+
+    <div class="box">
+        <h3>INGRESOS REGISTRADOS</h3>
+        <table class="table-6col">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Tipo</th>
+                    <th>Concepto</th>
+                    <th>Valor Unitario</th>
+                    <th>Cantidad</th>
+                    <th>Total</th>
+                </tr>
+            </thead>
+            <tbody id="tabla_ingresos">
+                <!-- Cargado dinámicamente -->
+            </tbody>
+        </table>
+    </div>
+
+    <div class="box">
+        <h3>GASTOS DEL MES</h3>
+        <table class="table-3col">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Concepto</th>
+                    <th>Valor</th>
+                </tr>
+            </thead>
+            <tbody id="tabla_gastos">
+                <!-- Cargado dinámicamente -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    let mesActual;
+
+    async function loadDashboard() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const defaultMes = formatMesLabel(new Date());
+        mesActual = urlParams.get("mes") || defaultMes;
+
+        // Cargar los meses disponibles en el selector
+        const availableMonths = await buildAvailableMeses(defaultMes);
+        if (!availableMonths.includes(mesActual)) {
+            // Si el mes actual no está en la BD y no es el por defecto, volver al por defecto
+            if (parseMesLabel(mesActual) === null) {
+                mesActual = defaultMes;
+            }
+        }
+
+        const selectMes = document.getElementById("select_mes");
+        selectMes.innerHTML = "";
+        availableMonths.forEach(m => {
+            const opt = document.createElement("option");
+            opt.value = m;
+            opt.textContent = m;
+            if (m === mesActual) opt.selected = true;
+            selectMes.appendChild(opt);
+        });
+
+        document.getElementById("mes_titulo").textContent = mesActual;
+        document.getElementById("resumen_mes_titulo").textContent = "Resumen de " + mesActual;
+
+        // Consultar Gastos del Mes
+        const gastos = await executeQuery(`
+            SELECT * FROM gastos WHERE mes = ? ORDER BY fecha DESC
+        `, [mesActual]);
+
+        // Consultar Ingresos del Mes
+        const ingresos = await executeQuery(`
+            SELECT ingresos.*, tipos_ingreso.nombre AS tipo_nombre, tipos_ingreso.tipo_calculo
+            FROM ingresos
+            INNER JOIN tipos_ingreso ON ingresos.tipo_ingreso_id = tipos_ingreso.id
+            WHERE ingresos.mes = ?
+            ORDER BY fecha DESC
+        `, [mesActual]);
+
+        const totalGastos = gastos.reduce((sum, g) => sum + (g.valor || 0), 0);
+        const totalIngresos = ingresos.reduce((sum, i) => sum + (i.total || 0), 0);
+        const balance = totalIngresos - totalGastos;
+
+        // Actualizar Cards principales
+        document.getElementById("total_ingresos_card").textContent = formatPesos(totalIngresos);
+        document.getElementById("total_gastos_card").textContent = formatPesos(totalGastos);
+        document.getElementById("balance_card").textContent = formatPesos(balance);
+
+        document.getElementById("stat_ingresos").textContent = formatPesos(totalIngresos);
+        document.getElementById("stat_gastos").textContent = formatPesos(totalGastos);
+        document.getElementById("stat_balance").textContent = formatPesos(balance);
+
+        // Comparación con el mes anterior
+        const mesAnterior = getPreviousMonthLabel(mesActual);
+        document.getElementById("stat_mes_anterior").textContent = mesAnterior || 'N/A';
+
+        let prevBalance = 0;
+        let comparacionText = "No hay comparación con mes anterior disponible.";
+
+        if (mesAnterior) {
+            const prevTotals = await executeQuery(`
+                SELECT 
+                    SUM(total) AS ingresos,
+                    (SELECT SUM(valor) FROM gastos WHERE mes = ?) AS gastos
+                FROM ingresos
+                WHERE mes = ?
+            `, [mesAnterior, mesAnterior]);
+
+            if (prevTotals.length > 0) {
+                const prevIngresos = prevTotals[0].ingresos || 0;
+                const prevGastos = prevTotals[0].gastos || 0;
+                prevBalance = prevIngresos - prevGastos;
+                const balanceDiff = balance - prevBalance;
+
+                if (balanceDiff > 0) {
+                    comparacionText = `Mejor que ${mesAnterior}: +${formatPesos(balanceDiff)}`;
+                } else if (balanceDiff < 0) {
+                    comparacionText = `Peor que ${mesAnterior}: -${formatPesos(Math.abs(balanceDiff))}`;
+                } else {
+                    comparacionText = `Igual al mes anterior ${mesAnterior}.`;
+                }
+            }
+        }
+        document.getElementById("stat_balance_anterior").textContent = formatPesos(prevBalance);
+        document.getElementById("stat_comparacion").textContent = comparacionText;
+
+        // Renderizar Gráfico de barras (Gastos por día)
+        const gastosPorDiaRows = await executeQuery(`
+            SELECT fecha, SUM(valor) AS total
+            FROM gastos
+            WHERE mes = ?
+            GROUP BY fecha
+            ORDER BY fecha ASC
+        `, [mesActual]);
+
+        const chartContainer = document.getElementById("chart_container");
+        chartContainer.innerHTML = "";
+
+        if (gastosPorDiaRows.length > 0) {
+            const chartWrapper = document.createElement("div");
+            chartWrapper.className = "chart-wrapper";
+
+            const maxTotal = Math.max(...gastosPorDiaRows.map(r => r.total || 0), 0);
+            const gastosPorDia = gastosPorDiaRows.map(r => {
+                const day = r.fecha.split("-")[2];
+                const altura = maxTotal > 0 ? Math.round((r.total / maxTotal) * 120) : 10;
+                return { day, total: r.total, height: altura };
+            });
+
+            gastosPorDia.forEach(punto => {
+                const bar = document.createElement("div");
+                bar.className = "chart-bar";
+                bar.style.height = punto.height + "px";
+                bar.title = `Día ${punto.day}: ${formatPesos(punto.total)}`;
+                
+                const label = document.createElement("span");
+                label.textContent = punto.day;
+                bar.appendChild(label);
+                
+                chartWrapper.appendChild(bar);
+            });
+
+            chartContainer.appendChild(chartWrapper);
+
+            const mayorDiaGasto = gastosPorDia.reduce((max, p) => p.total > max.total ? p : max, gastosPorDia[0]);
+            const diasConGasto = gastosPorDia.length;
+            const gastoPromedio = totalGastos / diasConGasto;
+
+            document.getElementById("chart_summary").innerHTML = `
+                Mayor gasto: día <strong>${mayorDiaGasto.day}</strong> con <strong>${formatPesos(mayorDiaGasto.total)}</strong>.<br>
+                Promedio diario: <strong>${formatPesos(gastoPromedio)}</strong>.
+            `;
+        } else {
+            chartContainer.innerHTML = "<p>No hay gastos registrados para este mes.</p>";
+            document.getElementById("chart_summary").textContent = "";
+        }
+
+        // Renderizar Tablas
+        // Tabla Ingresos
+        const tbodyIngresos = document.getElementById("tabla_ingresos");
+        tbodyIngresos.innerHTML = "";
+        if (ingresos.length > 0) {
+            ingresos.forEach(ing => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${formatFechaCorta(ing.fecha)}</td>
+                    <td>${ing.tipo_nombre || '-'}</td>
+                    <td>${ing.concepto_otro || '-'}</td>
+                    <td>${formatPesos(ing.valor_unitario)}</td>
+                    <td>${ing.cantidad || 0}</td>
+                    <td>${formatPesos(ing.total)}</td>
+                `;
+                tbodyIngresos.appendChild(tr);
+            });
+        } else {
+            tbodyIngresos.innerHTML = `<tr><td colspan="6" style="text-align:center;">No hay ingresos registrados para este mes.</td></tr>`;
+        }
+
+        // Tabla Gastos
+        const tbodyGastos = document.getElementById("tabla_gastos");
+        tbodyGastos.innerHTML = "";
+        if (gastos.length > 0) {
+            gastos.forEach(gas => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${formatFechaCorta(gas.fecha)}</td>
+                    <td>${gas.concepto}</td>
+                    <td>${formatPesos(gas.valor)}</td>
+                `;
+                tbodyGastos.appendChild(tr);
+            });
+        } else {
+            tbodyGastos.innerHTML = `<tr><td colspan="3" style="text-align:center;">No hay gastos registrados para este mes.</td></tr>`;
+        }
+    }
+
+    function cambiarMes(nuevoMes) {
+        window.location.search = `?mes=${encodeURIComponent(nuevoMes)}`;
+    }
+
+    // Iniciar
+    window.addEventListener("DOMContentLoaded", async () => {
+        await initDatabase();
+        await loadDashboard();
+    });
+</script>
+</body>
+</html>
