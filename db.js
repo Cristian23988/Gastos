@@ -11,7 +11,20 @@ const DEFAULT_RENDER_URL = 'https://gastos-uq90.onrender.com';
 // localStorage.setItem('BACKEND_URL', 'https://tu-app.onrender.com')
 const RENDER_BACKEND_URL = localStorage.getItem('BACKEND_URL') || DEFAULT_RENDER_URL;
 
-const API_BASE_URL = (isLocal || isRender) ? "" : RENDER_BACKEND_URL;
+// Detección del API URL
+let API_BASE_URL = "";
+if (isLocal) {
+    // Si corre local, y no es el puerto de Flask (5000), apunta al Flask local
+    if (window.location.port !== "5000") {
+        API_BASE_URL = "http://127.0.0.1:5000";
+    } else {
+        API_BASE_URL = "";
+    }
+} else if (isRender) {
+    API_BASE_URL = "";
+} else {
+    API_BASE_URL = RENDER_BACKEND_URL;
+}
 
 const SALARIO_MINIMO_2026 = 1750905;
 const AUXILIO_TRANSPORTE_2026 = 249095;
