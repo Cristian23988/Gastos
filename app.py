@@ -1,10 +1,10 @@
 from flask import Flask, render_template, request, redirect, jsonify
-import psycopg2
-import psycopg2.extras
+import pg8000
+import ssl
+from urllib.parse import urlparse, quote
 from datetime import datetime, timedelta, date
 import os
 import decimal
-from urllib.parse import quote
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -72,15 +72,71 @@ def api_query():
         return jsonify({"error": str(e)}), 500
 
 # ==================================================
-# CONEXIÓN DB
+# CONEXIÓN DB (PG8000 WRAPPERS FOR DICT CURSOR)
 # ==================================================
+
+class DictCursor:
+    def __init__(self, cursor):
+        self._cursor = cursor
+
+    def execute(self, operation, parameters=None):
+        if parameters is None:
+            parameters = []
+        return self._cursor.execute(operation, parameters)
+
+    def fetchall(self):
+        rows = self._cursor.fetchall()
+        if not self._cursor.description:
+            return rows
+        columns = [col[0].decode('utf-8') if isinstance(col[0], bytes) else col[0] for col in self._cursor.description]
+        return [dict(zip(columns, row)) for row in rows]
+
+    def fetchone(self):
+        row = self._cursor.fetchone()
+        if not row:
+            return None
+        if not self._cursor.description:
+            return row
+        columns = [col[0].decode('utf-8') if isinstance(col[0], bytes) else col[0] for col in self._cursor.description]
+        return dict(zip(columns, row))
+
+    def close(self):
+        self._cursor.close()
+
+    @property
+    def description(self):
+        return self._cursor.description
+
+class DictConnection:
+    def __init__(self, conn):
+        self._conn = conn
+
+    def cursor(self):
+        return DictCursor(self._conn.cursor())
+
+    def commit(self):
+        self._conn.commit()
+
+    def rollback(self):
+        self._conn.rollback()
+
+    def close(self):
+        self._conn.close()
 
 def get_connection():
     if not DATABASE_URL:
         raise Exception("DATABASE_URL no está configurada.")
-    conn = psycopg2.connect(DATABASE_URL)
-    conn.cursor_factory = psycopg2.extras.RealDictCursor
-    return conn
+    result = urlparse(DATABASE_URL)
+    ssl_context = ssl.create_default_context()
+    conn = pg8000.connect(
+        user=result.username,
+        password=result.password,
+        host=result.hostname,
+        port=result.port or 5432,
+        database=result.path[1:],
+        ssl_context=ssl_context
+    )
+    return DictConnection(conn)
 
 
 # ==================================================
@@ -143,28 +199,28 @@ def init_db():
     # but that's okay in this simplified setup.
     try:
         cur.execute("ALTER TABLE ingresos ADD COLUMN mes TEXT")
-    except psycopg2.errors.DuplicateColumn:
+    except Exception:
         conn.rollback() # Rollback the failed transaction
     try:
         cur.execute("ALTER TABLE ingresos ADD COLUMN auxilio_transporte REAL DEFAULT 0")
-    except psycopg2.errors.DuplicateColumn:
+    except Exception:
         conn.rollback()
 
     try:
         cur.execute("ALTER TABLE tipos_ingreso ADD COLUMN porcentaje_deduccion REAL DEFAULT 8")
-    except psycopg2.errors.DuplicateColumn:
+    except Exception:
         conn.rollback()
     try:
         cur.execute("ALTER TABLE tipos_ingreso ADD COLUMN deduccion_sobre_auxilio INTEGER DEFAULT 0")
-    except psycopg2.errors.DuplicateColumn:
+    except Exception:
         conn.rollback()
     try:
         cur.execute(f"ALTER TABLE tipos_ingreso ADD COLUMN auxilio_transporte_valor REAL DEFAULT {AUXILIO_TRANSPORTE_2026}")
-    except psycopg2.errors.DuplicateColumn:
+    except Exception:
         conn.rollback()
     try:
         cur.execute("ALTER TABLE tipos_ingreso ADD COLUMN recibe_auxilio_transporte INTEGER DEFAULT 0")
-    except psycopg2.errors.DuplicateColumn:
+    except Exception:
         conn.rollback()
 
     conn.commit() # Commit table creations and alterations
