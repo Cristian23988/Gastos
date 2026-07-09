@@ -15,8 +15,19 @@ def get_neon_connection():
     if not DATABASE_URL:
         return None
     try:
-        import psycopg2
-        return psycopg2.connect(DATABASE_URL)
+        import pg8000
+        import ssl
+        from urllib.parse import urlparse
+        result = urlparse(DATABASE_URL)
+        ssl_context = ssl.create_default_context()
+        return pg8000.connect(
+            user=result.username,
+            password=result.password,
+            host=result.hostname,
+            port=result.port or 5432,
+            database=result.path[1:],
+            ssl_context=ssl_context
+        )
     except Exception as e:
         print(f"Error connecting to Neon PostgreSQL: {e}")
         return None
@@ -55,7 +66,6 @@ def push_db_to_neon():
     if not conn:
         return
     try:
-        import psycopg2
         with open(DB, "rb") as f:
             db_data = f.read()
         
@@ -65,7 +75,7 @@ def push_db_to_neon():
             INSERT INTO sqlite_sync (id, db_file, updated_at)
             VALUES (1, %s, CURRENT_TIMESTAMP)
             ON CONFLICT (id) DO UPDATE SET db_file = EXCLUDED.db_file, updated_at = CURRENT_TIMESTAMP
-        """, (psycopg2.Binary(db_data),))
+        """, (db_data,))
         conn.commit()
         print("Base de datos SQLite subida exitosamente a Neon PostgreSQL.")
     except Exception as e:
@@ -1263,8 +1273,19 @@ def get_status():
     
     if DATABASE_URL:
         try:
-            import psycopg2
-            conn = psycopg2.connect(DATABASE_URL)
+            import pg8000
+            import ssl
+            from urllib.parse import urlparse
+            result = urlparse(DATABASE_URL)
+            ssl_context = ssl.create_default_context()
+            conn = pg8000.connect(
+                user=result.username,
+                password=result.password,
+                host=result.hostname,
+                port=result.port or 5432,
+                database=result.path[1:],
+                ssl_context=ssl_context
+            )
             cur = conn.cursor()
             cur.execute("SELECT * FROM information_schema.tables WHERE table_name = 'sqlite_sync'")
             exists = cur.fetchone() is not None
