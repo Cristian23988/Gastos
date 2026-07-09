@@ -9,6 +9,71 @@ app = Flask(__name__)
 DB_DEFAULT = "gastos.db"
 DB = os.environ.get("DATABASE_PATH", DB_DEFAULT)
 
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+def get_neon_connection():
+    if not DATABASE_URL:
+        return None
+    try:
+        import psycopg2
+        return psycopg2.connect(DATABASE_URL)
+    except Exception as e:
+        print(f"Error connecting to Neon PostgreSQL: {e}")
+        return None
+
+def pull_db_from_neon():
+    if not DATABASE_URL:
+        return
+    conn = get_neon_connection()
+    if not conn:
+        return
+    try:
+        cur = conn.cursor()
+        cur.execute("CREATE TABLE IF NOT EXISTS sqlite_sync (id INT PRIMARY KEY, db_file BYTEA, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+        conn.commit()
+        
+        cur.execute("SELECT db_file FROM sqlite_sync WHERE id = 1")
+        row = cur.fetchone()
+        if row and row[0]:
+            with open(DB, "wb") as f:
+                f.write(row[0])
+            print("Base de datos SQLite sincronizada desde Neon PostgreSQL.")
+        else:
+            print("No se encontro base de datos en Neon. Subiendo base de datos local inicial.")
+            push_db_to_neon()
+    except Exception as e:
+        print(f"Error al jalar la BD desde Neon: {e}")
+    finally:
+        conn.close()
+
+def push_db_to_neon():
+    if not DATABASE_URL:
+        return
+    if not os.path.exists(DB):
+        return
+    conn = get_neon_connection()
+    if not conn:
+        return
+    try:
+        import psycopg2
+        with open(DB, "rb") as f:
+            db_data = f.read()
+        
+        cur = conn.cursor()
+        cur.execute("CREATE TABLE IF NOT EXISTS sqlite_sync (id INT PRIMARY KEY, db_file BYTEA, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+        cur.execute("""
+            INSERT INTO sqlite_sync (id, db_file, updated_at)
+            VALUES (1, %s, CURRENT_TIMESTAMP)
+            ON CONFLICT (id) DO UPDATE SET db_file = EXCLUDED.db_file, updated_at = CURRENT_TIMESTAMP
+        """, (psycopg2.Binary(db_data),))
+        conn.commit()
+        print("Base de datos SQLite subida exitosamente a Neon PostgreSQL.")
+    except Exception as e:
+        print(f"Error al subir la BD a Neon: {e}")
+    finally:
+        conn.close()
+
+
 # Si estamos usando un disco persistente y la BD no existe allí todavía,
 # copiamos la base de datos local inicial para no perder los datos.
 if DB != DB_DEFAULT and not os.path.exists(DB):
@@ -18,6 +83,9 @@ if DB != DB_DEFAULT and not os.path.exists(DB):
         os.makedirs(db_dir, exist_ok=True)
     if os.path.exists(DB_DEFAULT):
         shutil.copy2(DB_DEFAULT, DB)
+
+# Sincronizar desde Neon al iniciar
+pull_db_from_neon()
 
 
 SALARIO_MINIMO_2026 = 1750905
@@ -1130,7 +1198,150 @@ app.jinja_env.filters['pesos_decimal'] = format_pesos_colombianos_decimal
 # INIT DB
 # ==================================================
 
+
+# ==================================================
+# ANÁLISIS COMPARATIVO DE MESES
+# ==================================================
+
+@app.route("/analisis")
+def analisis():
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    # Obtener lista de meses disponibles
+    all_meses_ingresos = cur.execute("SELECT DISTINCT mes FROM ingresos WHERE mes IS NOT NULL ORDER BY mes DESC").fetchall()
+    all_meses_gastos = cur.execute("SELECT DISTINCT mes FROM gastos WHERE mes IS NOT NULL ORDER BY mes DESC").fetchall()
+    
+    all_meses_set = set()
+    for row in all_meses_ingresos:
+        if row["mes"]:
+            all_meses_set.add(row["mes"])
+    for row in all_meses_gastos:
+        if row["mes"]:
+            all_meses_set.add(row["mes"])
+    
+    all_meses = sorted(
+        [m for m in all_meses_set if parse_mes_label(m)],
+        key=lambda m: parse_mes_label(m),
+        reverse=True
+    )
+
+    # Parámetros de filtro
+    meses_seleccionados = request.args.getlist("meses")
+    if not meses_seleccionados:
+        meses_seleccionados = all_meses[:3] if len(all_meses) >= 3 else all_meses
+
+    # Recopilar datos para cada mes
+    datos_meses = []
+    for mes in meses_seleccionados:
+        ingresos_total = cur.execute("SELECT SUM(total) as total FROM ingresos WHERE mes = ?", (mes,)).fetchone()
+        gastos_total = cur.execute("SELECT SUM(valor) as total FROM gastos WHERE mes = ?", (mes,)).fetchone()
+        
+        ingresos_val = ingresos_total["total"] or 0
+        gastos_val = gastos_total["total"] or 0
+        balance_val = ingresos_val - gastos_val
+        
+        datos_meses.append({
+            "mes": mes,
+            "ingresos": ingresos_val,
+            "gastos": gastos_val,
+            "balance": balance_val
+        })
+
+    conn.close()
+
+    return render_template(
+        "analisis.html",
+        all_meses=all_meses,
+        meses_seleccionados=meses_seleccionados,
+        datos_meses=datos_meses
+    )
+
+
+# ==================================================
+# LIMPIAR DB
+# ==================================================
+
+# @app.route("/limpiar_db")
+# def limpiar_db():
+#     conn = get_connection()
+#     cur = conn.cursor()
+#     cur.execute("DELETE FROM gastos")
+#     cur.execute("DELETE FROM ingresos")
+#     conn.commit()
+#     conn.close()
+#     return "Base de datos limpiada"
+
+
+# ==================================================
+# REGISTRO DE FILTROS JINJA2
+# ==================================================
+
+def format_fecha_filtro(value):
+    if not value:
+        return ''
+    try:
+        fecha_obj = datetime.strptime(value, "%Y-%m-%d")
+        return format_fecha_corta(fecha_obj)
+    except:
+        return value
+
+app.jinja_env.filters['fecha_corta'] = format_fecha_filtro
+app.jinja_env.filters['pesos'] = format_pesos_colombianos
+app.jinja_env.filters['pesos_decimal'] = format_pesos_colombianos_decimal
+
+
+# ==================================================
+# INIT DB
+# ==================================================
+
 init_db()
+
+
+# ==================================================
+# CORS & API ENDPOINTS FOR GITHUB PAGES SYNC
+# ==================================================
+
+@app.before_request
+def handle_options():
+    if request.method == "OPTIONS":
+        response = app.make_default_options_response()
+        response.headers.update({
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        })
+        return response
+
+@app.after_request
+def add_cors_headers(response):
+    response.headers.update({
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    })
+    return response
+
+@app.route("/api/db", methods=["GET"])
+def get_db_file():
+    from flask import send_file
+    pull_db_from_neon()  # Asegurar que jalamos la última versión desde Neon
+    if not os.path.exists(DB):
+        return {"error": "Database not found"}, 404
+    return send_file(DB, mimetype="application/x-sqlite3", as_attachment=True, download_name="gastos.db")
+
+@app.route("/api/db", methods=["POST"])
+def save_db_file():
+    if 'file' not in request.files:
+        return {"error": "No file part"}, 400
+    file = request.files['file']
+    if file.filename == '':
+        return {"error": "No selected file"}, 400
+    
+    file.save(DB)
+    push_db_to_neon()  # Subir la base de datos actualizada a Neon
+    return {"status": "success", "message": "Database updated successfully"}
 
 
 # ==================================================
@@ -1138,11 +1349,9 @@ init_db()
 # ==================================================
 
 if __name__ == "__main__":
-
     port = int(
         os.environ.get("PORT", 5000)
     )
-
     app.run(
         host="0.0.0.0",
         port=port

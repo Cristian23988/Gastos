@@ -4,6 +4,9 @@ const DB_NAME = 'gastos_db_store';
 const STORE_NAME = 'gastos_file';
 const DB_FILE_KEY = 'db_file';
 
+// URL del backend en Render (ej. 'https://control-gastos.onrender.com'). Deja vacío '' para usar solo almacenamiento local en IndexedDB.
+const RENDER_BACKEND_URL = 'https://control-gastos.onrender.com';
+
 const SALARIO_MINIMO_2026 = 1750905;
 const AUXILIO_TRANSPORTE_2026 = 249095;
 const TOPE_AUXILIO_TRANSPORTE = SALARIO_MINIMO_2026 * 2;
@@ -99,24 +102,111 @@ async function initDatabase(forceReload = false) {
         dbBuffer = await getDatabaseFile(idbInstance);
     }
 
-    if (!dbBuffer) {
-        console.log("No se encontró BD en IndexedDB o se forzó recarga. Descargando de GitHub...");
-        try {
-            const response = await fetch('gastos.db');
-            if (!response.ok) throw new Error("No se pudo obtener gastos.db");
-            dbBuffer = await response.arrayBuffer();
-            await saveDatabaseFile(idbInstance, dbBuffer);
-        } catch (err) {
-            console.warn("Fallo la descarga de gastos.db, creando base de datos vacía.", err);
-            dbInstance = new SQL.Database();
-            initTables(dbInstance);
-            await saveDatabaseFile(idbInstance, dbInstance.export().buffer);
-            return dbInstance;
-        }
+    if (!dbBuffer || forceReload) {
+        dbBuffer = await downloadDatabaseFromServer();
+    } else {
+        // Cargar inmediatamente desde IndexedDB local para rapidez, 
+        // y sincronizar en segundo plano en caso de que haya datos nuevos en Render.
+        syncDatabaseFromServerInBackground();
     }
 
     dbInstance = new SQL.Database(new Uint8Array(dbBuffer));
     return dbInstance;
+}
+
+// --- FUNCIONES DE SINCRONIZACIÓN CON EL SERVIDOR RENDER ---
+
+async function downloadDatabaseFromServer() {
+    console.log("Descargando base de datos...");
+    if (RENDER_BACKEND_URL) {
+        try {
+            const response = await fetch(`${RENDER_BACKEND_URL}/api/db`);
+            if (response.ok) {
+                const buffer = await response.arrayBuffer();
+                await saveDatabaseFile(idbInstance, buffer);
+                console.log("Base de datos descargada con éxito de Render.");
+                return buffer;
+            }
+        } catch (err) {
+            console.warn("Fallo la descarga desde Render, intentando desde GitHub...", err);
+        }
+    }
+    
+    // Descarga desde el propio repositorio GitHub Pages (gastos.db estático original)
+    try {
+        const response = await fetch('gastos.db');
+        if (!response.ok) throw new Error("No se pudo obtener gastos.db");
+        const buffer = await response.arrayBuffer();
+        await saveDatabaseFile(idbInstance, buffer);
+        console.log("Descargada base de datos original desde GitHub Pages.");
+        return buffer;
+    } catch (err) {
+        console.warn("Fallo la descarga de gastos.db, creando base de datos vacía.", err);
+        const tempDb = new SQL.Database();
+        initTables(tempDb);
+        const buffer = tempDb.export().slice().buffer;
+        await saveDatabaseFile(idbInstance, buffer);
+        return buffer;
+    }
+}
+
+let isSyncing = false;
+async function syncDatabaseFromServerInBackground() {
+    if (isSyncing || !RENDER_BACKEND_URL) return;
+    isSyncing = true;
+    try {
+        console.log("Sincronizando base de datos con Render en segundo plano...");
+        const response = await fetch(`${RENDER_BACKEND_URL}/api/db`);
+        if (response.ok) {
+            const serverBuffer = await response.arrayBuffer();
+            const localBuffer = await getDatabaseFile(idbInstance);
+            
+            if (!localBuffer || !areBuffersEqual(serverBuffer, localBuffer)) {
+                console.log("Se detectaron cambios nuevos en Render. Actualizando base de datos local...");
+                await saveDatabaseFile(idbInstance, serverBuffer);
+                if (dbInstance) {
+                    dbInstance = new SQL.Database(new Uint8Array(serverBuffer));
+                    // Dispara un evento por si alguna vista activa quiere actualizarse
+                    window.dispatchEvent(new Event('db-synced'));
+                }
+            } else {
+                console.log("Base de datos local al día con Render.");
+            }
+        }
+    } catch (e) {
+        console.warn("No se pudo sincronizar con Render:", e);
+    } finally {
+        isSyncing = false;
+    }
+}
+
+async function uploadDbToServer(arrayBuffer) {
+    if (!RENDER_BACKEND_URL) return;
+    try {
+        const blob = new Blob([arrayBuffer], { type: "application/x-sqlite3" });
+        const formData = new FormData();
+        formData.append("file", blob, "gastos.db");
+        
+        console.log("Subiendo base de datos a Render...");
+        const response = await fetch(`${RENDER_BACKEND_URL}/api/db`, {
+            method: "POST",
+            body: formData
+        });
+        if (!response.ok) throw new Error("Error HTTP " + response.status);
+        console.log("Base de datos sincronizada y guardada en Render exitosamente.");
+    } catch (e) {
+        console.error("Error al subir base de datos a Render:", e);
+    }
+}
+
+function areBuffersEqual(buf1, buf2) {
+    if (buf1.byteLength !== buf2.byteLength) return false;
+    const dv1 = new Uint8Array(buf1);
+    const dv2 = new Uint8Array(buf2);
+    for (let i = 0; i < dv1.byteLength; i++) {
+        if (dv1[i] !== dv2[i]) return false;
+    }
+    return true;
 }
 
 function initTables(db) {
@@ -189,7 +279,10 @@ async function executeRun(query, params = []) {
     try {
         db.run(query, params);
         const binaryDb = db.export();
-        await saveDatabaseFile(idbInstance, binaryDb.buffer);
+        const cleanBuffer = binaryDb.slice().buffer;
+        await saveDatabaseFile(idbInstance, cleanBuffer);
+        // Subir cambios a Render
+        uploadDbToServer(cleanBuffer);
     } catch (e) {
         console.error("SQL Error en run:", query, e);
         throw e;
@@ -224,6 +317,10 @@ async function importDatabaseFile(file) {
                 idbInstance = await openIndexedDB();
                 await saveDatabaseFile(idbInstance, buffer);
                 dbInstance = new SQL.Database(new Uint8Array(buffer));
+                
+                // Subir base de datos importada a Render
+                uploadDbToServer(buffer);
+                
                 resolve(true);
             } catch (err) {
                 reject(new Error("El archivo seleccionado no es una base de datos SQLite válida. " + err.message));
