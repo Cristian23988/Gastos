@@ -1253,6 +1253,35 @@ def save_db_file():
     push_db_to_neon()  # Subir la base de datos actualizada a Neon
     return {"status": "success", "message": "Database updated successfully"}
 
+@app.route("/api/status", methods=["GET"])
+def get_status():
+    status_info = {
+        "database_url_configured": DATABASE_URL is not None and len(DATABASE_URL) > 0,
+        "local_db_exists": os.path.exists(DB),
+        "db_path": DB
+    }
+    
+    if DATABASE_URL:
+        try:
+            import psycopg2
+            conn = psycopg2.connect(DATABASE_URL)
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM information_schema.tables WHERE table_name = 'sqlite_sync'")
+            exists = cur.fetchone() is not None
+            status_info["neon_connection"] = "success"
+            status_info["sqlite_sync_table_exists"] = exists
+            if exists:
+                cur.execute("SELECT id, updated_at, octet_length(db_file) FROM sqlite_sync")
+                row = cur.fetchone()
+                status_info["sqlite_sync_row"] = str(row) if row else "no row"
+            conn.close()
+        except Exception as e:
+            status_info["neon_connection"] = f"failed: {str(e)}"
+    else:
+        status_info["neon_connection"] = "not configured"
+        
+    return status_info
+
 
 # ==================================================
 # RUN APP
