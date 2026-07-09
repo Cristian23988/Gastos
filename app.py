@@ -1,8 +1,9 @@
-from flask import Flask, render_template, request, redirect
+from flask import Flask, render_template, request, redirect, jsonify
 import psycopg2
 import psycopg2.extras
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import os
+import decimal
 from urllib.parse import quote
 from dotenv import load_dotenv
 
@@ -16,8 +17,61 @@ SALARIO_MINIMO_2026 = 1750905
 AUXILIO_TRANSPORTE_2026 = 249095
 TOPE_AUXILIO_TRANSPORTE = SALARIO_MINIMO_2026 * 2
 
- 
-#s ==================================================
+# ==================================================
+# CORS Y ENDPOINTS API PARA GITHUB PAGES
+# ==================================================
+
+def serialize_row(row):
+    for k, v in row.items():
+        if isinstance(v, (datetime, date)):
+            row[k] = v.strftime("%Y-%m-%d")
+        elif isinstance(v, decimal.Decimal):
+            row[k] = float(v)
+    return row
+
+@app.after_request
+def add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE"
+    return response
+
+@app.route("/api/query", methods=["POST", "OPTIONS"])
+def api_query():
+    if request.method == "OPTIONS":
+        return jsonify({"status": "ok"})
+
+    try:
+        data = request.get_json(force=True)
+        query = data.get("query")
+        params = data.get("params", [])
+
+        if not query:
+            return jsonify({"error": "No query provided"}), 400
+
+        # Reemplazar marcadores SQLite (?) con marcadores PostgreSQL (%s)
+        query = query.replace("?", "%s")
+
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute(query, params)
+
+        rows = []
+        if cur.description:
+            result_rows = cur.fetchall()
+            rows = [serialize_row(dict(r)) for r in result_rows]
+        else:
+            conn.commit()
+
+        cur.close()
+        conn.close()
+        return jsonify(rows)
+
+    except Exception as e:
+        print(f"Error in api_query: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# ==================================================
 # CONEXIÓN DB
 # ==================================================
 
@@ -651,10 +705,17 @@ app.jinja_env.filters['fecha_corta'] = format_fecha_corta
 app.jinja_env.filters['pesos'] = format_pesos_colombianos
 app.jinja_env.filters['pesos_decimal'] = format_pesos_colombianos_decimal
 
+# Inicializar base de datos al importar si la URL está configurada
+if DATABASE_URL:
+    try:
+        init_db()
+        print("Base de datos inicializada correctamente al iniciar la aplicación.")
+    except Exception as e:
+        print(f"Error al inicializar la base de datos al iniciar: {e}")
+
 # ==================================================
 # INIT DB and RUN APP
 # ==================================================
 if __name__ == "__main__":
-    init_db()
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
