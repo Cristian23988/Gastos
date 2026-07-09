@@ -5,7 +5,7 @@ const STORE_NAME = 'gastos_file';
 const DB_FILE_KEY = 'db_file';
 
 // URL del backend en Render (ej. 'https://control-gastos.onrender.com'). Deja vacío '' para usar solo almacenamiento local en IndexedDB.
-const RENDER_BACKEND_URL = 'https://control-gastos.onrender.com';
+const RENDER_BACKEND_URL = 'https://gastos-uq90.onrender.com';
 
 const SALARIO_MINIMO_2026 = 1750905;
 const AUXILIO_TRANSPORTE_2026 = 249095;
